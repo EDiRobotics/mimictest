@@ -2,15 +2,9 @@ import os
 import math
 import numpy as np
 import torch
-from torchvision.transforms.functional import resize
 from einops import rearrange
 import av
 import cv2
-from accelerate import Accelerator
-from mimictest.Simulation.ParallelEnv import ParallelMimic
-from mimictest.Utils.PreProcess import PreProcess
-from mimictest.Nets.UNet1D import UNet 
-from mimictest.Wrappers.DiffusionPolicy import DiffusionPolicy
 
 def save_video(file, video):
     container = av.open(file, 'w', 'mp4')

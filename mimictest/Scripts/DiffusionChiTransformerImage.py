@@ -11,7 +11,7 @@ from mimictest.Utils.PreProcess import PreProcess
 from mimictest.Utils.RobomimicDataset import CustomMimicDataset, DataPrefetcher
 from mimictest.Utils.ComputeLimit import ComputeLimit
 from mimictest.Wrappers.DiffusionPolicy import DiffusionPolicy
-from mimictest.Nets.UNet1D import UNet
+from mimictest.Nets.Chi_Transformer import Chi_Transformer
 from mimictest.Simulation.ParallelEnv import ParallelMimic
 from mimictest.Train import train
 from mimictest.Evaluation import Evaluation
@@ -30,7 +30,7 @@ if __name__ == '__main__':
     else:
         file_name = 'image.hdf5'
     dataset_path = f'/root/dataDisk/robomimic/datasets/square/ph/' + file_name
-    bs_per_gpu = 640
+    bs_per_gpu = 1280
     desired_rgb_shape = 84
     crop_shape = 76
     workers_per_gpu = 8
@@ -45,10 +45,17 @@ if __name__ == '__main__':
 
     # Network
     resnet_name = 'resnet18'
-    diffusion_step_embed_dim = 128
-    down_dims = [512, 1024, 2048]
-    kernel_size = 5
-    n_groups = 8
+    obs_as_cond: True
+    max_T = chunk_size
+    n_layer = 8
+    n_cond_layers = 0  # >0: use transformer encoder for cond, otherwise use MLP
+    n_head = 4
+    n_emb = 256
+    p_drop_emb = 0.0
+    p_drop_attn = 0.3
+    causal_attn = True
+    obs_as_cond = True
+    time_as_cond = True # if false, use BERT like encoder only arch, time as input
 
     # Diffusion
     diffuser_train_steps = 100
@@ -102,18 +109,24 @@ if __name__ == '__main__':
         num_workers=workers_per_gpu,
         drop_last=True,     
     )
-    unet = UNet(
+    transformer = Chi_Transformer(
         obs_horizon=obs_horizon,
         lowdim_obs_dim=len(limits['low_dim_max']),
         num_actions=num_actions_6d,
+        max_T=max_T,
         resnet_name=resnet_name,
-        diffusion_step_embed_dim=diffusion_step_embed_dim,
-        down_dims=down_dims,
-        kernel_size=kernal_size,
-        n_groups=n_groups,
+        n_layer=n_layer,
+        n_head=n_head,
+        n_emb=n_emb,
+        p_drop_emb=p_drop_emb,
+        p_drop_attn=p_drop_attn,
+        causal_attn=causal_attn,
+        time_as_cond=time_as_cond,
+        obs_as_cond=obs_as_cond,
+        n_cond_layers=n_cond_layers,
     ).to(device)
     policy = DiffusionPolicy(
-        net=unet,
+        net=transformer,
         num_actions=num_actions_6d,
         chunk_size=chunk_size,
         scheduler_name=diffuser_solver,

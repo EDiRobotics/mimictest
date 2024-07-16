@@ -2,6 +2,7 @@
 A simple testbed for robotics manipulation policies based on [robomimic](https://robomimic.github.io/). It uses this [dataset](https://diffusion-policy.cs.columbia.edu/data/training/). All policies are rewritten in a simple way.
 
 ### News
+**[2024.7.16]** Add transformer version of Diffusion Policy.
 **[2024.7.15]** Initial release which only contains UNet version of Diffusion Policy.
 
 ### Supported Policies
