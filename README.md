@@ -3,6 +3,7 @@ A simple testbed for robotics manipulation policies based on [robomimic](https:/
 
 ### News
 **[2024.7.16]** Add transformer version of Diffusion Policy.
+
 **[2024.7.15]** Initial release which only contains UNet version of Diffusion Policy.
 
 ### Supported Policies
