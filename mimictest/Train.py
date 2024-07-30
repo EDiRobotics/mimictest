@@ -22,25 +22,25 @@ def train(
     step, 
     print_interval,
     bs_per_gpu,
+    do_profile,
 ):
-    '''
-    prof = profile(
-        schedule = torch.profiler.schedule(
-            wait=20,
-            warmup=3,
-            active=4,
-            repeat=1,
-        ),
-        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-        on_trace_ready=tensorboard_trace_handler(save_path+'prof'),
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True,
-        with_flops=True,
-        with_modules=True,
-    )
-    prof.start()
-    '''
+    if do_profile:
+        prof = profile(
+            schedule = torch.profiler.schedule(
+                wait=20,
+                warmup=3,
+                active=4,
+                repeat=1,
+            ),
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            on_trace_ready=tensorboard_trace_handler(save_path+'prof'),
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True,
+            with_flops=True,
+            with_modules=True,
+        )
+        prof.start()
 
     dataset_len = len(prefetcher.loader.dataset)
     avg_reward = 0.0
@@ -48,11 +48,7 @@ def train(
         if epoch % save_interval == 0:
             if epoch != 0: 
                 # in the 1st epoch, policy.ema has not been initialized. You may also load the wrong ckpt and modify the right one
-                acc.wait_for_everyone()
-                acc.save(acc.unwrap_model(policy.net).state_dict(), save_path+f'policy_{epoch+load_epoch_id}.pth')
-                policy.ema.copy_to(policy.ema_net.parameters())
-                acc.save(acc.unwrap_model(policy.ema_net).state_dict(), save_path+f'ema_{epoch+load_epoch_id}.pth')
-
+                policy.save_pretrained(acc, save_path+f'policy_{epoch+load_epoch_id}.pth')
                 avg_reward = torch.tensor(eva.evaluate_on_env(
                     policy, 
                     num_eval_ep, 
@@ -75,7 +71,8 @@ def train(
                 recon_loss = policy.compute_loss(rgbs, low_dims, actions)
                 acc.backward(recon_loss)
                 optimizer.step(optimizer)
-                policy.update_ema() # TODO
+                if policy.use_ema:
+                    policy.update_ema() # TODO
                 cum_recon_loss += recon_loss.detach() / print_interval
                 cum_load_time += load_time / print_interval
 
@@ -112,9 +109,8 @@ def train(
             batch_idx += 1
             step += 1
             batch, load_time = prefetcher.next()
-            '''
-            prof.step()
-            if batch_idx == 28:
-                prof.stop()
-            '''
+            if do_profile:
+                prof.step()
+                if batch_idx == 28:
+                    prof.stop()
         scheduler.step()

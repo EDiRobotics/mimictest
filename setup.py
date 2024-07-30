@@ -11,7 +11,7 @@ setup(
         'einops',
         'opencv-python-headless',
         'accelerate',
-        'av',
+        'moviepy',
         'cython<3',
         'gymnasium',
         'numpy<1.24',

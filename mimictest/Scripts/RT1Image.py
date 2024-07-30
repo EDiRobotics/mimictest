@@ -3,6 +3,7 @@ import json
 import torch
 from torch.utils.data import DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
+from transformers import AutoProcessor, AutoModelForCausalLM
 from transformers import get_constant_schedule_with_warmup
 from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
@@ -10,15 +11,15 @@ from mimictest.Utils.AccelerateFix import AsyncStep
 from mimictest.Utils.PreProcess import PreProcess
 from mimictest.Utils.RobomimicDataset import CustomMimicDataset, DataPrefetcher
 from mimictest.Utils.ComputeLimit import ComputeLimit
-from mimictest.Wrappers.DiffusionPolicy import DiffusionPolicy
-from mimictest.Nets.Chi_UNet1D import Chi_UNet1D
+from mimictest.Wrappers.SimplePolicy import SimplePolicy
+from mimictest.Nets.RT1 import RT1
 from mimictest.Simulation.ParallelEnv import ParallelMimic
 from mimictest.Train import train
 from mimictest.Evaluation import Evaluation
 
 if __name__ == '__main__':
     # Script-specific settings (general settings stored in 
-    mode = 'train' # or 'eval'
+    mode = 'train' # 'train' or 'eval'
 
     # Saving path
     save_path = './Save/'
@@ -30,7 +31,7 @@ if __name__ == '__main__':
     else:
         file_name = 'image.hdf5'
     dataset_path = f'/root/dataDisk/robomimic/datasets/square/ph/' + file_name
-    bs_per_gpu = 640
+    bs_per_gpu = 432
     desired_rgb_shape = 84
     crop_shape = 76
     workers_per_gpu = 8
@@ -44,36 +45,33 @@ if __name__ == '__main__':
     limits = ComputeLimit(dataset_path, abs_mode)
 
     # Network
-    resnet_name = 'resnet18'
-    diffusion_step_embed_dim = 128
-    down_dims = [512, 1024, 2048]
-    kernel_size = 5
-    n_groups = 8
-
-    # Diffusion
-    diffuser_train_steps = 100
-    diffuser_infer_steps = 100
-    diffuser_solver = "ddpm"
-    beta_schedule = "squaredcos_cap_v2"
-    prediction_type = 'epsilon'
-    clip_sample = True
-    loss_func = torch.nn.functional.mse_loss
+    efficientnet_version = "efficientnet_v2_s"
+    FiLM_cond_channel = 1 # Since we dont use it 
+    depth = 8
+    vision_token_dim = 512
+    ff_dim = 128
+    n_heads = 2
+    head_dim = 64
+    max_T = 128
+    token_learner_num_output_tokens = 8
+    drop_prob = 0.1
+    freeze_vision_tower = False
 
     # Training
     num_training_epochs = 5000
-    save_interval = 200 
+    save_interval = 50 
     load_epoch_id = 0
     gradient_accumulation_steps = 1
-    lr_max = 3e-4
+    lr_max = 2e-5
     warmup_steps = 5
     weight_decay = 1e-4
-    print_interval = 44
+    print_interval = 60
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
-    num_eval_ep = 8
-    test_chunk_size = 8
-    max_test_ep_len = 50
+    num_eval_ep = 6
+    test_chunk_size = 1
+    max_test_ep_len = 400
     smooth_factor = 0.01
 
     # Preparation
@@ -102,27 +100,25 @@ if __name__ == '__main__':
         num_workers=workers_per_gpu,
         drop_last=True,     
     )
-    unet = Chi_UNet1D(
-        obs_horizon=obs_horizon,
-        lowdim_obs_dim=len(limits['low_dim_max']),
-        num_actions=num_actions_6d,
-        resnet_name=resnet_name,
-        diffusion_step_embed_dim=diffusion_step_embed_dim,
-        down_dims=down_dims,
-        kernel_size=kernel_size,
-        n_groups=n_groups,
-    ).to(device)
-    policy = DiffusionPolicy(
-        net=unet,
+    net = RT1(
+        efficientnet_version=efficientnet_version,
+        FiLM_cond_channel=FiLM_cond_channel,
+        lowdim_obs_num=len(limits['low_dim_max']),
         num_actions=num_actions_6d,
         chunk_size=chunk_size,
-        scheduler_name=diffuser_solver,
-        num_train_steps=diffuser_train_steps,
-        num_infer_steps=diffuser_infer_steps,
-        beta_schedule=beta_schedule,
-        clip_sample=clip_sample,
-        prediction_type=prediction_type,
-        loss_func=loss_func,
+        depth=depth,
+        vision_token_dim=vision_token_dim,
+        ff_dim=ff_dim,
+        n_heads=n_heads,
+        head_dim=head_dim,
+        max_T=max_T,
+        token_learner_num_output_tokens=token_learner_num_output_tokens,
+        drop_prob=drop_prob,
+        freeze_vision_tower=freeze_vision_tower,
+    ).to(device)
+    policy = SimplePolicy(
+        net=net,
+        loss_func=torch.nn.functional.l1_loss,
     )
     if os.path.isfile(save_path+f'policy_{load_epoch_id}.pth'):
         policy.load_pretrained(acc, save_path+f'policy_{load_epoch_id}.pth')
@@ -133,12 +129,11 @@ if __name__ == '__main__':
         step = 0
     optimizer = torch.optim.AdamW(policy.net.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
     scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
-    policy.net, policy.ema_net, optimizer, loader = acc.prepare(
+    policy.net, optimizer, loader = acc.prepare(
         policy.net, 
-        policy.ema_net, 
         optimizer, 
         loader, 
-        device_placement=[True, True, True, False],
+        device_placement=[True, True, False],
     )
     optimizer.step = AsyncStep
     prefetcher = DataPrefetcher(loader, device)

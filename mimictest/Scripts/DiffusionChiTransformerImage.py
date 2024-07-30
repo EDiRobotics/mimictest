@@ -45,7 +45,6 @@ if __name__ == '__main__':
 
     # Network
     resnet_name = 'resnet18'
-    obs_as_cond: True
     max_T = chunk_size
     n_layer = 8
     n_cond_layers = 0  # >0: use transformer encoder for cond, otherwise use MLP
@@ -69,7 +68,7 @@ if __name__ == '__main__':
     # Training
     num_training_epochs = 5000
     save_interval = 200 
-    load_epoch_id = 0
+    load_epoch_id = 1000
     gradient_accumulation_steps = 1
     lr_max = 3e-4
     warmup_steps = 5
@@ -77,8 +76,8 @@ if __name__ == '__main__':
     print_interval = 22
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
-    num_envs = 8
-    num_eval_ep = 3
+    num_envs = 16
+    num_eval_ep = 6
     test_chunk_size = 8
     max_test_ep_len = 50
     smooth_factor = 0.01
@@ -138,9 +137,7 @@ if __name__ == '__main__':
         loss_func=loss_func,
     )
     if os.path.isfile(save_path+f'policy_{load_epoch_id}.pth'):
-        policy.net.load_state_dict(torch.load(save_path+f'policy_{load_epoch_id}.pth'))
-        policy.ema_net.load_state_dict(torch.load(save_path+f'ema_{load_epoch_id}.pth'))
-        acc.print(f'load policy_{load_epoch_id}.pth, ema_{load_epoch_id}.pth')
+        policy.load_pretrained(acc, save_path+f'policy_{load_epoch_id}.pth')
     if os.path.isfile(save_path+'step.json'):
         with open(save_path+'step.json', 'r') as json_file:
             step = json.load(open(save_path+'step.json'))
@@ -190,8 +187,9 @@ if __name__ == '__main__':
             step=step,
             print_interval=print_interval,
             bs_per_gpu=bs_per_gpu,
+            do_profile=False,
         )
     elif mode == 'eval':
-        avg_reward  = torch.tensor(eva.evaluate_on_env(policy, num_eval_ep, max_test_ep_len, save_path=save_path, record_video=False)).to(device)
+        avg_reward  = torch.tensor(eva.evaluate_on_env(policy, num_eval_ep, max_test_ep_len, save_path=save_path, record_video=True)).to(device)
         avg_reward = acc.gather_for_metrics(avg_reward.view(1, -1)).mean(dim=0)
         acc.print(f'chunk size {test_chunk_size}, success rate {avg_reward}')

@@ -3,9 +3,6 @@ from typing import Tuple, Sequence, Dict, Union, Optional, Callable
 import math
 import torch
 import torch.nn as nn
-from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
-from diffusers.schedulers.scheduling_ddim import DDIMScheduler
-from diffusers.training_utils import EMAModel
 from mimictest.Nets.ResNet import get_resnet, replace_bn_with_gn
 
 class SinusoidalPosEmb(nn.Module):
@@ -173,7 +170,6 @@ class TransformerForDiffusion(ModuleAttrMixin):
 
         # init
         self.apply(self._init_weights)
-        print("number of parameters: {}".format(sum(p.numel() for p in self.parameters())))
 
     def _init_weights(self, module):
         ignore_types = (nn.Dropout,
@@ -333,21 +329,22 @@ class Chi_Transformer(nn.Module):
             n_cond_layers=n_cond_layers,
         )
 
-    def forward(self, rgb, low_dim, noisy_actions, timesteps):
-        # encoder vision features
-        B, T, V, C, H, W = rgb.shape
-        rgb_agent = rgb[:, :, 0]
-        rgb_gripper = rgb[:, :, 1]
-        rgb_agent = rgb_agent.view(B*T, C, H, W)
-        rgb_gripper = rgb_gripper.view(B*T, C, H, W)
-        image_features = torch.cat((self.agent_ve(rgb_agent), self.gripper_ve(rgb_gripper)), dim=1) # (b*t, d)
-        image_features = image_features.view(B, T, -1) # (b t d)
+    def forward(self, rgb, low_dim, noisy_actions, timesteps, obs_features=None):
+        if obs_features is None:
+            # encoder vision features
+            B, T, V, C, H, W = rgb.shape
+            rgb_agent = rgb[:, :, 0]
+            rgb_gripper = rgb[:, :, 1]
+            rgb_agent = rgb_agent.view(B*T, C, H, W)
+            rgb_gripper = rgb_gripper.view(B*T, C, H, W)
+            image_features = torch.cat((self.agent_ve(rgb_agent), self.gripper_ve(rgb_gripper)), dim=1) # (b*t, d)
+            image_features = image_features.view(B, T, -1) # (b t d)
 
-        # concatenate vision feature and low-dim obs
-        obs_features = torch.cat([image_features, low_dim], dim=-1)
+            # concatenate vision feature and low-dim obs
+            obs_features = torch.cat([image_features, low_dim], dim=-1)
 
         # predict the noise residual
         noise_pred = self.noise_pred_net(
             noisy_actions, timesteps, cond=obs_features)
 
-        return noise_pred
+        return noise_pred, obs_features

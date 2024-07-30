@@ -1,0 +1,13 @@
+transformers
+diffusers
+scipy
+einops
+opencv-python-headless
+accelerate
+av
+cython<3
+gymnasium
+numpy<1.24
+free-mujoco-py==2.1.6
+stable-baselines3
+robomimic

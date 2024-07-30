@@ -183,10 +183,6 @@ class ConditionalUnet1D(nn.Module):
         self.down_modules = down_modules
         self.final_conv = final_conv
 
-        print("number of parameters: {:e}".format(
-            sum(p.numel() for p in self.parameters()))
-        )
-
     def forward(self,
         sample: torch.Tensor,
         timestep: Union[torch.Tensor, float, int],
@@ -270,23 +266,24 @@ class Chi_UNet1D(nn.Module):
             n_groups=n_groups,
         )
 
-    def forward(self, rgb, low_dim, noisy_actions, timesteps):
-        # encoder vision features
-        B, T, V, C, H, W = rgb.shape
-        rgb_agent = rgb[:, :, 0]
-        rgb_gripper = rgb[:, :, 1]
-        rgb_agent = rgb_agent.view(B*T, C, H, W)
-        rgb_gripper = rgb_gripper.view(B*T, C, H, W)
-        image_features = torch.cat((self.agent_ve(rgb_agent), self.gripper_ve(rgb_gripper)), dim=1) # (b*t, d)
-        image_features = image_features.view(B, -1) # (b, t*d)
+    def forward(self, rgb, low_dim, noisy_actions, timesteps, obs_features=None):
+        if obs_features is None:
+            # encoder vision features
+            B, T, V, C, H, W = rgb.shape
+            rgb_agent = rgb[:, :, 0]
+            rgb_gripper = rgb[:, :, 1]
+            rgb_agent = rgb_agent.view(B*T, C, H, W)
+            rgb_gripper = rgb_gripper.view(B*T, C, H, W)
+            image_features = torch.cat((self.agent_ve(rgb_agent), self.gripper_ve(rgb_gripper)), dim=1) # (b*t, d)
+            image_features = image_features.view(B, -1) # (b, t*d)
 
-        # concatenate vision feature and low-dim obs
-        B, T, D = low_dim.shape
-        low_dim = low_dim.view(B, -1)
-        obs_features = torch.cat([image_features, low_dim], dim=-1)
+            # concatenate vision feature and low-dim obs
+            B, T, D = low_dim.shape
+            low_dim = low_dim.view(B, -1)
+            obs_features = torch.cat([image_features, low_dim], dim=-1)
 
         # predict the noise residual
         noise_pred = self.noise_pred_net(
             noisy_actions, timesteps, global_cond=obs_features)
 
-        return noise_pred
+        return noise_pred, obs_features

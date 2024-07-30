@@ -1,0 +1,8 @@
+LICENSE
+README.md
+setup.py
+mimictest.egg-info/PKG-INFO
+mimictest.egg-info/SOURCES.txt
+mimictest.egg-info/dependency_links.txt
+mimictest.egg-info/requires.txt
+mimictest.egg-info/top_level.txt
