@@ -153,8 +153,8 @@ Square task with professional demos:
 | RT-1 | 62% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/RT1_square/RT1.pth) | 23.8M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/tree/main/RT1_square) | 
 | Diffusion Policy (UNet) | 88.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/unet_square/unet.pth) | 329M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/unet_square) |
 | Diffusion Policy (Transformer) | 90.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/DiffusionTransformer_square/DiffusionTransformer.pth) | 31.5M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/DiffusionTransformer_square) |
-| Florence (linear head) | 88.5% | [HuggingFace]() | 270.8M | [HuggingFace]() |
-| Florence (diffusion head) | 92.7% | link | xM | link |
+| Florence (linear head) | 88.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_square/florence.pth) | 270.8M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_square) |
+| Florence (diffusion head) | 92.7% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_octo_square/florence_octo.pth) | 279.9M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_octo_square) |
 
 </div>
 
@@ -181,7 +181,17 @@ Square task with professional demos:
   	- It thought the gripper picked up the object, but actually not: 1
 	- Pause before inserting object into the target: 2
  - Florence (linear head):
-	- c
+   	- Failure to grasp an object after picking it up and the object falls: 1
+	- Pause before picking the object: 6
+	- Pause before inserting object into the target: 5
+	- It thought the gripper picked up the object, but actually not: 1
+ 	- It successfylly inserts the object into target but suddenly lifts and throws the object away: 1
+  - Florence (diffusion transformer head):
+	- Failure to grasp an object after picking it up and the object falls: 6
+	- Pause before picking the object: 4
+	- Pause before inserting object into the target: 2
+	- When inserting the object into target, the object gets stuck halfway through, and the policy doesn't know how to fix it: 2
+   	- When inserting the object into target, the object falls halfway through, and the policy doesn't know how to fix it: 1
 
 </details>
 
