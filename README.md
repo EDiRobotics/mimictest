@@ -24,14 +24,14 @@ We also have policies trained and tested on the [CALVIN](https://github.com/mees
 
 **Please remember we build systems for you ヾ(^▽^*)). Feel free to ask [me](zhuohengli@foxmail.com) if you have any question!**
 
-### News
+## News
 **[2024.7.30]** Add Florence policy with MLP action head & diffusion action head. Add RT-1 policy.  
 
 **[2024.7.16]** Add transformer version of Diffusion Policy.
 
 **[2024.7.15]** Initial release which only contains UNet version of Diffusion Policy.
 
-### Features
+## Features
 
 <details>
   <summary> Unified State and Action Space. </summary>
@@ -78,7 +78,7 @@ Policy executes:	| | |a|a|
 
 </details>
 
-### Supported Policies
+## Supported Policies
 
 We implement the following algorithms:
 
@@ -140,7 +140,7 @@ We implement the following algorithms:
 
 </details>
 
-### Performance on Example Task
+## Performance on Example Task
 
 Square task with professional demos:
 
@@ -148,19 +148,44 @@ Square task with professional demos:
 
 <div align="center">
 	
-| Policy | Success Rate | Checkpoint | Failure Cases |
-|--|--|--|--|
-| RT-1 | 62% | link | link | 
-| Diffusion Policy (UNet) | 88.5% | link | link |
-| Diffusion Policy (Transformer) | 90.5% | link | link |
-| Florence (linear head) | 88.5% | link | link |
-| Florence (diffusion head) | 92.7% | link | link |
+| Policy | Success Rate | Checkpoint | Model Size | Failure Cases |
+|--|--|--|--|--|
+| RT-1 | 62% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/RT1_square/RT1.pth) | 23.8M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/tree/main/RT1_square) | 
+| Diffusion Policy (UNet) | 88.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/unet_square/unet.pth) | 329M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/unet_square) |
+| Diffusion Policy (Transformer) | 90.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/DiffusionTransformer_square/DiffusionTransformer.pth) | 31.5M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/DiffusionTransformer_square) |
+| Florence (linear head) | 88.5% | [HuggingFace]() | 270.8M | [HuggingFace]() |
+| Florence (diffusion head) | 92.7% | link | xM | link |
 
 </div>
 
 *The success rate is measured with an average of 3 latest checkpoints. Each checkpoint is evaluated with 96 rollouts.
+*For diffusion models, we save both the trained model and the exponential moving average (EMA) of the trained model in a checkpoint
 
-### Installation
+<details>
+  <summary> Failure analysis </summary>
+
+- RT-1:
+	- Failure to grasp an object after picking it up and the object falls: 1
+ 	- Pause before picking the object: 6
+	- Pause before inserting object into the target: 2
+ 	- It thought the gripper picked up the object, but actually not: 3
+  	- When inserting the object into target, the object gets stuck halfway through, and the policy doesn't know how to fix it: 1
+- Diffusion Policy (UNet):
+  	- Failure to grasp an object after picking it up and the object falls: 2
+	- Pause before picking the object: 2
+   	- It thought the gripper picked up the object, but actually not: 1
+	- When inserting the object into target, the object gets stuck halfway through, and the policy doesn't know how to fix it: 3
+ 	- It successfylly inserts the object into target but suddenly lifts and throws the object away: 1
+- Diffusion Policy (Transformer):
+	- Pause before picking the object: 1 (In the third-person view, objects are obscured by the gripper)
+  	- It thought the gripper picked up the object, but actually not: 1
+	- Pause before inserting object into the target: 2
+ - Florence (linear head):
+	- c
+
+</details>
+
+## Installation
 
 Other python versions may also work, like 3.8
 
@@ -174,7 +199,7 @@ bash setup.bash
 
 You should also download dataset that contains `env_meta` [here](https://diffusion-policy.cs.columbia.edu/data/training/).
 
-### Multi-GPU Train & Evaluation
+## Multi-GPU Train & Evaluation
 1. You shall first run `accelerate config` to set environment parameters (number of GPUs, precision, etc). We recommend to use `bf16`.
 2. Download and unzip this [dataset](https://diffusion-policy.cs.columbia.edu/data/training/).
 3. Please check and modify the settings (e.g, train or eval, and the corresponding settings) in the scripts you want to run, under the `Script` directory. Each script represent a configuration of an algorithm.
@@ -183,7 +208,7 @@ You should also download dataset that contains `env_meta` [here](https://diffusi
 accelerate launch Script/<the script you choose>.py
 ```
 
-### Possible Installation Problems
+## Possible Installation Problems
 
 [](https://github.com/StarCycle/ParallelRobomimic#possible-problems)
 
