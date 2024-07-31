@@ -1,7 +1,28 @@
-<div align=center><img width = '500' height ='250' src="https://github.com/user-attachments/assets/8d27de3f-bc5d-40b9-b1d1-2129b10a128f"/></div>
+<div align=center><img width = '600' height ='350' src="https://github.com/user-attachments/assets/8d27de3f-bc5d-40b9-b1d1-2129b10a128f"/></div>
 
+
+<div align="center">
+	
 # Mimictest
-A simple testbed for robotics manipulation policies based on [robomimic](https://robomimic.github.io/). It uses Diffusion Policy's [dataset](https://diffusion-policy.cs.columbia.edu/data/training/). All policies are rewritten in a simple way.
+
+</div>
+
+A simple testbed for robotics manipulation policies based on [robomimic](https://robomimic.github.io/). It uses Diffusion Policy's [dataset](https://diffusion-policy.cs.columbia.edu/data/training/). All policies are rewritten in a simple way. We may further expand it to the [libero](https://github.com/Lifelong-Robot-Learning/LIBERO) benchmark, which is also based on [robosuite](https://github.com/ARISE-Initiative/robosuite) simulator.
+
+We also have policies trained and tested on the [CALVIN](https://github.com/mees/calvin) benchmark, e.g., [GR1-Training](https://github.com/EDiRobotics/GR1-Training) which is the current SOTA on the hardest ABC->D task of CALVIN.
+
+<details>
+  <summary> We also recommend other good frameworks / comunities for robotics policy learning. </summary>
+
+- HuggingFace's [LeRobot](https://github.com/huggingface/lerobot), which currently have ACT, Diffusion Policy (only simple pusht task), TDMPC, and VQ-BeT. LeRobot has a nice robotics learning community on this [discord server](https://discord.com/invite/s3KuuzsPFb).
+
+- [CleanDiffuser](https://github.com/CleanDiffuserTeam/CleanDiffuser) which implements multiple diffusion algorithms for imitation learning and reinforcement learning. Our implementation of diffusion algorithms is different from CleanDiffuser, but we thank the help of their team members.
+
+- Dr. Mu Yao organizes a nice robitics learning community for Chinese researchers, see [DeepTimber website](https://gamma.app/public/DeepTimber-Robotics-Innovations-Community-A-Community-for-Multi-m-og0uv8mswl1a3q7?mode=doc) and [知乎](https://zhuanlan.zhihu.com/p/698664022).
+
+</details>
+
+**Please remember we build systems for you ヾ(^▽^*)). Feel free to ask [me](zhuohengli@foxmail.com) if you have any question!**
 
 ### News
 **[2024.7.30]** Add Florence policy with MLP action head & diffusion action head. Add RT-1 policy.  
@@ -48,6 +69,15 @@ Policy executes:	| | |a|a|
 
 </details>
 
+<details>
+  <summary> Sorry...but you should tune the learning rate manually. </summary>
+	
+- We try new algorithms here so we are not sure when the algorithm will converge before we run it. Thus, we use a simple constant learning rate schduler with warmup. To get the best performance, you should set the learning rate manually: a high learning rate at the beginning and a lower learning rate at the end.
+
+- Sometimes you need to freeze the visual encoder at the first training stage, and unfreeze the encoder when the loss converges in the first stage. It's can be done by setting `freeze_vision_tower=<True/False>` in the script.
+
+</details>
+
 ### Supported Policies
 
 We implement the following algorithms:
@@ -62,6 +92,8 @@ We implement the following algorithms:
 - You should choose a text encoder in [Sentence Transformers](https://sbert.net/) to generate text embeddings and sent them to RT1.
 
 - Our implementation predicts multiple continuous actions (see above) instead of a single discrete action. We find our setting has better performance.
+
+- **To get better performance, you should freeze the EfficientNet visual encoder in the 1st training stage, and unfreeze it in the 2nd stage.**
 </details>
 
 <details>
@@ -69,7 +101,7 @@ We implement the following algorithms:
 
 - [Original implementation]([https://github.com/google-research/robotics_transformer](https://github.com/real-stanford/diffusion_policy)).
 
-- Our architecture is a copy of Chi Cheng's network. We test it in our pipeline and it has the same performance.
+- Our architecture is a copy of Chi Cheng's network. We test it in our pipeline and it has the same performance. Note that diffusion policy trains 2 resnet visual encoders for 2 camera views from scratch, so we never freeze the visual encoders.
 	
 - We also support predict actions in episilon / sample / v-space and other diffusion schedulers. The `DiffusionPolicy` wrapper can easily adapt to different network designs.
 </details>
@@ -81,9 +113,31 @@ We implement the following algorithms:
 
 - Unlike [OpenVLA](https://github.com/openvla/openvla) and [RT2](https://deepmind.google/discover/blog/rt-2-new-model-translates-vision-and-language-into-action/), Florence2 is much smaller with 0.23B (Florence-2-base) or 0.7B (Florence-2-large) parameters.
 	
-- Unlike [OpenVLA](https://github.com/openvla/openvla) and [RT2](https://deepmind.google/discover/blog/rt-2-new-model-translates-vision-and-language-into-action/) which generate discrete actions, our Florence policy generates continuous actions with an MLP action head or a diffusion transformer action head.
+- Unlike [OpenVLA](https://github.com/openvla/openvla) and [RT2](https://deepmind.google/discover/blog/rt-2-new-model-translates-vision-and-language-into-action/) which generate discrete actions, our Florence policy generates continuous actions with a linear action head or a diffusion transformer action head.
 
-- The following figure illustrates the architecture of the Florence policy:
+- The following figure illustrates the architecture of the Florence policy. We always freeze the DaViT visual encoder of Florence2, which is so good that unfreezing it does not improve the success rate.
+
+<div align=center>
+	<img width = '500' height ='350' src = "https://github.com/user-attachments/assets/54a236d1-492b-49fd-ab5f-59e53e88d259"/></div>
+<div align="center">
+<div align=center>
+	Original Florence2 Network</div>
+<div align="center">
+
+<div align=center>
+	<img width = '500' height ='350' src = "https://github.com/user-attachments/assets/cde63327-cc1c-4b12-8ef1-40f3ed21d26d"/></div>
+<div align="center">
+<div align=center>
+	Florence policy with a linear action head</div>
+<div align="center">
+
+<div align=center>
+	<img width = '550' height ='350' src = "https://github.com/user-attachments/assets/7ab7a387-e223-4dcd-947b-d3dadb03794f"/></div>
+<div align="center">
+<div align=center>
+	Florence policy with a diffusion transformer action head</div>
+<div align="center">
+
 </details>
 
 ### Performance on Example Task
@@ -99,7 +153,7 @@ Square task with professional demos:
 | RT-1 | 62% | link | link | 
 | Diffusion Policy (UNet) | 88.5% | link | link |
 | Diffusion Policy (Transformer) | 90.5% | link | link |
-| Florence (MLP head) | 88.5% | link | link |
+| Florence (linear head) | 88.5% | link | link |
 | Florence (diffusion head) | 92.7% | link | link |
 
 </div>
