@@ -202,7 +202,7 @@ Other python versions may also work, like 3.8
 ```
 conda create -n mimic python=3.9
 conda activate mimic
-https://github.com/EDiRobotics/mimictest
+git clone https://github.com/EDiRobotics/mimictest
 cd mimictest
 bash setup.bash
 ```
