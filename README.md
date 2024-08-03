@@ -7,7 +7,7 @@
 
 </div>
 
-A simple testbed for robotics manipulation policies based on [robomimic](https://robomimic.github.io/). It uses Diffusion Policy's [dataset](https://diffusion-policy.cs.columbia.edu/data/training/). All policies are rewritten in a simple way. We may further expand it to the [libero](https://github.com/Lifelong-Robot-Learning/LIBERO) benchmark, which is also based on [robosuite](https://github.com/ARISE-Initiative/robosuite) simulator.
+A simple testbed for robotics manipulation policies based on [robomimic](https://robomimic.github.io/). All policies are rewritten in a simple way. We may further expand it to the [libero](https://github.com/Lifelong-Robot-Learning/LIBERO) benchmark, which is also based on [robosuite](https://github.com/ARISE-Initiative/robosuite) simulator.
 
 We also have policies trained and tested on the [CALVIN](https://github.com/mees/calvin) benchmark, e.g., [GR1-Training](https://github.com/EDiRobotics/GR1-Training) which is the current SOTA on the hardest ABC->D task of CALVIN.
 
@@ -207,11 +207,17 @@ cd mimictest
 bash setup.bash
 ```
 
-You should also download dataset that contains `env_meta` [here](https://diffusion-policy.cs.columbia.edu/data/training/).
+You should also download dataset that contains `robomimic_image.zip` or `robomimic_lowdim.zip` from the [official link](https://diffusion-policy.cs.columbia.edu/data/training/) or [HuggingFace](https://huggingface.co/datasets/EDiRobotics/mimictest_data). In this example, I use the tool of [HF-Mirror](https://hf-mirror.com/). You can set the environment variable `export HF_ENDPOINT=https://hf-mirror.com` to avoid the connection problem in some regions.
+```
+apt install git-lfs aria2
+wget https://hf-mirror.com/hfd/hfd.sh
+chmod a+x hfd.sh
+./hfd.sh EDiRobotics/mimictest_data --dataset --tool aria2c -x 4
+```
 
 ## Multi-GPU Train & Evaluation
 1. You shall first run `accelerate config` to set environment parameters (number of GPUs, precision, etc). We recommend to use `bf16`.
-2. Download and unzip this [dataset](https://diffusion-policy.cs.columbia.edu/data/training/).
+2. Download and unzip the dataset mentioned above.
 3. Please check and modify the settings (e.g, train or eval, and the corresponding settings) in the scripts you want to run, under the `Script` directory. Each script represent a configuration of an algorithm.
 4. Please then run
 ```
