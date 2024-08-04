@@ -197,16 +197,16 @@ Square task with professional demos:
 
 ## Installation
 
-Other python versions may also work, like 3.8
-
+Other python versions may also work, like 3.8. You can also use [mirror sites of Github](https://github.com/runningcheese/MirrorSite) to avoid the connection problem in some regions.
 ```
 conda create -n mimic python=3.9
 conda activate mimic
 git clone https://github.com/EDiRobotics/mimictest
 cd mimictest
-bash setup.bash
+apt install curl git libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev software-properties-common net-tools unzip vim virtualenv wget xpra xserver-xorg-dev libglfw3-dev patchelf cmake
+pip install -e .
+pip install robosuite@https://github.com/cheng-chi/robosuite/archive/277ab9588ad7a4f4b55cf75508b44aa67ec171f0.tar.gz
 ```
-
 You should also download dataset that contains `robomimic_image.zip` or `robomimic_lowdim.zip` from the [official link](https://diffusion-policy.cs.columbia.edu/data/training/) or [HuggingFace](https://huggingface.co/datasets/EDiRobotics/mimictest_data). In this example, I use the tool of [HF-Mirror](https://hf-mirror.com/). You can set the environment variable `export HF_ENDPOINT=https://hf-mirror.com` to avoid the connection problem in some regions.
 ```
 apt install git-lfs aria2
@@ -214,15 +214,24 @@ wget https://hf-mirror.com/hfd/hfd.sh
 chmod a+x hfd.sh
 ./hfd.sh EDiRobotics/mimictest_data --dataset --tool aria2c -x 9
 ```
-Or you can only download a subset of the data, i.e., the square task with image input:
+If you only want to download a subset of the data, e.g., the square task with image input:
 ```
 ./hfd.sh EDiRobotics/mimictest_data --dataset --tool aria2c -x 9 --include robomimic_image/square.zip
+```
+To use florence-based models, you should download one of it from HuggingFace, for example:
+```
+./hfd.sh microsoft/Florence-2-base --model --tool aria2c -x 9
+```
+And then set `model_path` in the script, for example:
+```
+# in Script/FlorenceImage.py
+model_path = "/path/to/downloaded/florence/folder"
 ```
 
 ## Multi-GPU Train & Evaluation
 1. You shall first run `accelerate config` to set environment parameters (number of GPUs, precision, etc). We recommend to use `bf16`.
 2. Download and unzip the dataset mentioned above.
-3. Please check and modify the settings (e.g, train or eval, and the corresponding settings) in the scripts you want to run, under the `Script` directory. Each script represent a configuration of an algorithm.
+3. Please check and modify the settings (e.g, train or eval, and the corresponding settings) in the scripts you want to run, under the `Script` directory. **Each script represents a configuration of an algorithm.**
 4. Please then run
 ```
 accelerate launch Script/<the script you choose>.py
