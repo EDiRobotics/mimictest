@@ -212,7 +212,11 @@ You should also download dataset that contains `robomimic_image.zip` or `robomim
 apt install git-lfs aria2
 wget https://hf-mirror.com/hfd/hfd.sh
 chmod a+x hfd.sh
-./hfd.sh EDiRobotics/mimictest_data --dataset --tool aria2c -x 4
+./hfd.sh EDiRobotics/mimictest_data --dataset --tool aria2c -x 9
+```
+Or you can only download a subset of the data, i.e., the square task with image input:
+```
+./hfd.sh EDiRobotics/mimictest_data --dataset --tool aria2c -x 9 --include robomimic_image/square.zip
 ```
 
 ## Multi-GPU Train & Evaluation
