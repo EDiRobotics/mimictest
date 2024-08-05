@@ -6,6 +6,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'transformers',
+        'timm',
         'diffusers',
         'scipy',
         'einops',
