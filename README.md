@@ -197,7 +197,7 @@ Square task with professional demos:
 
 ## Installation
 
-Other python versions may also work, like 3.8. You can also use [mirror sites of Github](https://github.com/runningcheese/MirrorSite) to avoid the connection problem in some regions.
+To use `robosuite1.2`, we need a conda environment with python 3.8 or 3.9. You can use [mirror sites of Github](https://github.com/runningcheese/MirrorSite) to avoid the connection problem in some regions.
 ```
 conda create -n mimic python=3.9
 conda activate mimic
@@ -207,26 +207,43 @@ apt install curl git libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev 
 pip install -e .
 pip install robosuite@https://github.com/cheng-chi/robosuite/archive/277ab9588ad7a4f4b55cf75508b44aa67ec171f0.tar.gz
 ```
+
 You should also download dataset that contains `robomimic_image.zip` or `robomimic_lowdim.zip` from the [official link](https://diffusion-policy.cs.columbia.edu/data/training/) or [HuggingFace](https://huggingface.co/datasets/EDiRobotics/mimictest_data). In this example, I use the tool of [HF-Mirror](https://hf-mirror.com/). You can set the environment variable `export HF_ENDPOINT=https://hf-mirror.com` to avoid the connection problem in some regions.
+
 ```
 apt install git-lfs aria2
 wget https://hf-mirror.com/hfd/hfd.sh
 chmod a+x hfd.sh
 ./hfd.sh EDiRobotics/mimictest_data --dataset --tool aria2c -x 9
 ```
+
 If you only want to download a subset of the data, e.g., the square task with image input:
+
 ```
 ./hfd.sh EDiRobotics/mimictest_data --dataset --tool aria2c -x 9 --include robomimic_image/square.zip
 ```
+
+<details>
+  <summary> You should also do these to use florence-based models. </summary>
+
 To use florence-based models, you should download one of it from HuggingFace, for example:
 ```
 ./hfd.sh microsoft/Florence-2-base --model --tool aria2c -x 9
 ```
+
 And then set `model_path` in the script, for example:
 ```
 # in Script/FlorenceImage.py
 model_path = "/path/to/downloaded/florence/folder"
 ```
+
+You need to install flash-attention. We recommend to download a pre-build wheel from [official release](https://github.com/Dao-AILab/flash-attention/releases), instead of building a wheel by yourself. For example (you should choose a wheel depending on your system):
+```
+wget https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3+cu118torch2.4cxx11abiTRUE-cp39-cp39-linux_x86_64.whl
+pip install flash_attn-2.6.3+cu118torch2.4cxx11abiTRUE-cp39-cp39-linux_x86_64.whl
+```
+
+</details>
 
 ## Multi-GPU Train & Evaluation
 1. You shall first run `accelerate config` to set environment parameters (number of GPUs, precision, etc). We recommend to use `bf16`.
