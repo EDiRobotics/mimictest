@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, random_split
-from transformers import AutoProcessor, AutoModelForCausalLM
 from transformers import get_constant_schedule_with_warmup
 from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
@@ -10,15 +9,15 @@ from mimictest.Utils.AccelerateFix import AsyncStep
 from mimictest.Utils.PreProcess import PreProcess
 from mimictest.Utils.RobomimicDataset import CustomMimicDataset, DataPrefetcher
 from mimictest.Utils.ComputeLimit import ComputeLimit
-from mimictest.Wrappers.BasePolicy import BasePolicy
-from mimictest.Nets.RT1 import RT1
+from mimictest.Wrappers.DiffusionPolicy import DiffusionPolicy
+from mimictest.Nets.FlorenceMDTNet import FlorenceMDTNet
 from mimictest.Simulation.ParallelEnv import ParallelMimic
 from mimictest.Train import train
 from mimictest.Evaluation import Evaluation
 
 if __name__ == '__main__':
-    # Script-specific settings (general settings stored in 
-    mode = 'train' # 'train' or 'eval'
+    # Script-specific settings 
+    mode = 'train' # or 'eval'
 
     # Saving path
     save_path = Path('./Save/')
@@ -31,7 +30,7 @@ if __name__ == '__main__':
     else:
         file_name = 'image.hdf5'
     dataset_path = Path('/root/dataDisk/square/ph/') / file_name
-    bs_per_gpu = 432
+    bs_per_gpu = 360
     desired_rgb_shape = 84
     crop_shape = 76
     workers_per_gpu = 8
@@ -45,39 +44,45 @@ if __name__ == '__main__':
     limits = ComputeLimit(dataset_path, abs_mode)
 
     # Network
-    # select from https://pytorch.org/vision/main/models/efficientnetv2.html
-    # or https://pytorch.org/vision/main/models/efficientnet.html
-    efficientnet_version = "efficientnet_v2_s"
-    FiLM_cond_channel = 1 # We don't use it in Robomimic but you can enable it with language-conditioned tasks 
-    depth = 8
-    vision_token_dim = 512
-    ff_dim = 128
-    n_heads = 2
-    head_dim = 64
-    max_T = 128
-    token_learner_num_output_tokens = 8
-    drop_prob = 0.1
-    freeze_vision_tower = False
+    model_path = Path("/root/dataDisk/Florence-2-base")
+    freeze_vision_tower = True
+    freeze_florence = False
+    num_action_query = 10
+    n_heads = 8
+    attn_pdrop = 0.3
+    resid_pdrop = 0.1
+    mlp_pdrop = 0.05
+    n_layers = 4
+    block_size = 0 
     do_compile = False
     do_profile = False
+
+    # Diffusion
+    diffuser_train_steps = 10
+    diffuser_infer_steps = 10
+    diffuser_solver = "ddim"
+    beta_schedule = "squaredcos_cap_v2"
+    prediction_type = 'epsilon'
+    clip_sample = True
+    ema_interval = 10
+    loss_func = torch.nn.functional.mse_loss
 
     # Training
     num_training_epochs = 1000
     save_interval = 50 
     load_epoch_id = 0
     gradient_accumulation_steps = 1
-    lr_max = 2e-5
+    lr_max = 1e-4
     warmup_steps = 5
     weight_decay = 1e-4
-    print_interval = 60
+    print_interval = 79
     record_video = False
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
     num_eval_ep = 6
-    test_chunk_size = 1
-    max_test_ep_len = 400
-    smooth_factor = 0.01
+    test_chunk_size = 8
+    max_test_ep_len = 50
 
     # Preparation
     kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
@@ -117,35 +122,43 @@ if __name__ == '__main__':
         num_workers=workers_per_gpu,
         drop_last=True,     
     )
-    net = RT1(
-        efficientnet_version=efficientnet_version,
-        FiLM_cond_channel=FiLM_cond_channel,
-        lowdim_obs_num=len(limits['low_dim_max']),
+    net = FlorenceMDTNet(
+        path=model_path,
+        freeze_vision_tower=freeze_vision_tower,
+        freeze_florence=freeze_florence,
+        num_actions=num_actions_6d,
+        num_action_query=num_action_query,
+        lowdim_obs_dim=len(limits['low_dim_max']),
+        n_heads=n_heads,
+        attn_pdrop=attn_pdrop,
+        resid_pdrop=resid_pdrop,
+        n_layers=n_layers,
+        block_size=block_size,
+        mlp_pdrop=mlp_pdrop,
+    ).to(device)
+    policy = DiffusionPolicy(
+        net=net,
+        loss_func=loss_func,
+        do_compile=do_compile,
         num_actions=num_actions_6d,
         chunk_size=chunk_size,
-        depth=depth,
-        vision_token_dim=vision_token_dim,
-        ff_dim=ff_dim,
-        n_heads=n_heads,
-        head_dim=head_dim,
-        max_T=max_T,
-        token_learner_num_output_tokens=token_learner_num_output_tokens,
-        drop_prob=drop_prob,
-        freeze_vision_tower=freeze_vision_tower,
-    ).to(device)
-    policy = BasePolicy(
-        net=net,
-        loss_func=torch.nn.functional.l1_loss,
-        do_compile=do_compile,
+        scheduler_name=diffuser_solver,
+        num_train_steps=diffuser_train_steps,
+        num_infer_steps=diffuser_infer_steps,
+        ema_interval=ema_interval,
+        beta_schedule=beta_schedule,
+        clip_sample=clip_sample,
+        prediction_type=prediction_type,
     )
     policy.load_pretrained(acc, save_path, load_epoch_id) # also set wandb here
-    optimizer = torch.optim.AdamW(policy.net.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
+    optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
     scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
-    policy.net, optimizer, loader = acc.prepare(
+    policy.net, policy.ema_net, optimizer, loader = acc.prepare(
         policy.net, 
+        policy.ema_net, 
         optimizer, 
         loader, 
-        device_placement=[True, True, False],
+        device_placement=[True, True, True, False],
     )
     optimizer.step = AsyncStep
     prefetcher = DataPrefetcher(loader, device)

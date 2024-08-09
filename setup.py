@@ -13,6 +13,8 @@ setup(
         'opencv-python-headless',
         'accelerate',
         'moviepy',
+        'tdqm',
+        'wandb',
         'cython<3',
         'gymnasium',
         'numpy<1.24',

@@ -25,7 +25,13 @@ We also have policies trained and tested on the [CALVIN](https://github.com/mees
 **Please remember we build systems for you ヾ(^▽^*)). Feel free to ask [me](zhuohengli@foxmail.com) if you have any question!**
 
 ## News
-**[2024.7.30]** Add Florence policy with MLP action head & diffusion action head. Add RT-1 policy.  
+**[2024.8.9]** Several updates below. And we are merging the base Florence policy to HuggingFace LeRobot.
+- Add Florence policy with DiT diffusion action head from [MDT](https://github.com/intuitive-robots/mdt_policy) developed by [intuitive robot lab](https://github.com/intuitive-robots) at KIT. 
+- Switch from tensorboard to wandb.
+- Heavily optimize training speed of Florence-series models.
+- Support compilation.
+
+**[2024.7.30]** Add Florence policy with MLP action head & diffusion transformer action head (from Cheng Chi's Diffusion policy). Add RT-1 policy.  
 
 **[2024.7.16]** Add transformer version of Diffusion Policy.
 
@@ -113,7 +119,7 @@ We implement the following algorithms:
 
 - Unlike [OpenVLA](https://github.com/openvla/openvla) and [RT2](https://deepmind.google/discover/blog/rt-2-new-model-translates-vision-and-language-into-action/), Florence2 is much smaller with 0.23B (Florence-2-base) or 0.7B (Florence-2-large) parameters.
 	
-- Unlike [OpenVLA](https://github.com/openvla/openvla) and [RT2](https://deepmind.google/discover/blog/rt-2-new-model-translates-vision-and-language-into-action/) which generate discrete actions, our Florence policy generates continuous actions with a linear action head or a diffusion transformer action head.
+- Unlike [OpenVLA](https://github.com/openvla/openvla) and [RT2](https://deepmind.google/discover/blog/rt-2-new-model-translates-vision-and-language-into-action/) which generate discrete actions, our Florence policy generates continuous actions with a linear action head / a diffusion transformer action head from Cheng Chi's Diffusion Policy / a DiT action head from MDT policy.
 
 - The following figure illustrates the architecture of the Florence policy. We always freeze the DaViT visual encoder of Florence2, which is so good that unfreezing it does not improve the success rate.
 
@@ -154,7 +160,8 @@ Square task with professional demos:
 | Diffusion Policy (UNet) | 88.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/unet_square/unet.pth) | 329M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/unet_square) |
 | Diffusion Policy (Transformer) | 90.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/DiffusionTransformer_square/DiffusionTransformer.pth) | 31.5M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/DiffusionTransformer_square) |
 | Florence (linear head) | 88.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_square/florence.pth) | 270.8M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_square) |
-| Florence (diffusion head) | 92.7% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_octo_square/florence_octo.pth) | 279.9M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_octo_square) |
+| Florence (diffusion head - Cheng Chi) | 92.7% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_octo_square/florence_octo.pth) | 279.9M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_octo_square) |
+| Florence (diffusion head - MDT DiT) | 93.75% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_mdt_square/florence_mdt_square.pth) | 322.79M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/tree/main/florence_mdt_square) |
 
 </div>
 
@@ -186,12 +193,16 @@ Square task with professional demos:
 	- Pause before inserting object into the target: 5
 	- It thought the gripper picked up the object, but actually not: 1
  	- It successfylly inserts the object into target but suddenly lifts and throws the object away: 1
-  - Florence (diffusion transformer head):
+  - Florence (Cheng Chi's diffusion transformer head):
 	- Failure to grasp an object after picking it up and the object falls: 6
 	- Pause before picking the object: 4
 	- Pause before inserting object into the target: 2
 	- When inserting the object into target, the object gets stuck halfway through, and the policy doesn't know how to fix it: 2
    	- When inserting the object into target, the object falls halfway through, and the policy doesn't know how to fix it: 1
+- Florence (MDT DiT head):
+	- Pause before picking the object: 4
+	- When inserting the object into target, the object gets stuck halfway through, and the policy doesn't know how to fix it: 1
+	- 
 
 </details>
 

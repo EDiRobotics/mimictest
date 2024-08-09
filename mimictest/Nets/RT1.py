@@ -1,5 +1,3 @@
-import importlib
-import numpy as np
 import torch 
 from torch import nn
 import mimictest.Nets.EfficientNetWithFiLM as EfficientNetWithFiLM
@@ -25,9 +23,12 @@ class RT1(nn.Module):
             freeze_vision_tower,
             ):
         super().__init__()
-        self.freeze_vision_tower = freeze_vision_tower
         efficientnet_class = getattr(EfficientNetWithFiLM, efficientnet_version)
         self.vision_encoder = efficientnet_class(weights="DEFAULT", FiLM_cond_channel=FiLM_cond_channel)
+        if freeze_vision_tower:
+            for param in self.net.vision_encoder.parameters():
+                param.requires_grad = False
+
         original_channels = self.vision_encoder.features[-1][1].weight.shape[0]
         self.vision_pre_proj = nn.Conv2d(original_channels, vision_token_dim, 1)
         self.token_learner = TokenLearner(
@@ -58,11 +59,7 @@ class RT1(nn.Module):
 
         B, T, V, C, H, W = rgbs.shape
         rgbs = rgbs.view(B*T*V, C, H, W)
-        if self.freeze_vision_tower:
-            with torch.no_grad():
-                rgb_tokens = self.vision_encoder(rgbs, text_embeds.expand(B*T*V, -1)) 
-        else:
-            rgb_tokens = self.vision_encoder(rgbs, text_embeds.expand(B*T*V, -1)) 
+        rgb_tokens = self.vision_encoder(rgbs, text_embeds.expand(B*T*V, -1)) 
         rgb_tokens = self.vision_pre_proj(rgb_tokens)
         rgb_tokens = self.token_learner(rgb_tokens) 
         B_T_V, C, N = rgb_tokens.shape

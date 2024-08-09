@@ -1,7 +1,10 @@
 import json
+import glob
 from time import time
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity, tensorboard_trace_handler
+import wandb
+from tqdm import tqdm
 
 def train(
     acc, 
@@ -15,13 +18,12 @@ def train(
     num_eval_ep, 
     max_test_ep_len,
     device, 
-    writer,
     save_path,
     load_epoch_id,
     save_interval,
-    step, 
     print_interval,
     bs_per_gpu,
+    record_video,
     do_profile,
 ):
     if do_profile:
@@ -33,7 +35,7 @@ def train(
                 repeat=1,
             ),
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-            on_trace_ready=tensorboard_trace_handler(save_path+'prof'),
+            on_trace_ready=tensorboard_trace_handler(save_path/'prof'),
             record_shapes=True,
             profile_memory=True,
             with_stack=True,
@@ -44,15 +46,18 @@ def train(
 
     dataset_len = len(prefetcher.loader.dataset)
     avg_reward = 0.0
-    for epoch in range(num_training_epochs):
+    for epoch in tqdm(range(num_training_epochs), desc=f"train epochs", disable=not acc.is_main_process):
         if epoch % save_interval == 0:
             if epoch != 0: 
                 # in the 1st epoch, policy.ema has not been initialized. You may also load the wrong ckpt and modify the right one
-                policy.save_pretrained(acc, save_path+f'policy_{epoch+load_epoch_id}.pth')
+                policy.save_pretrained(acc, save_path, epoch+load_epoch_id)
                 avg_reward = torch.tensor(eva.evaluate_on_env(
+                    acc,
                     policy, 
+                    epoch,
                     num_eval_ep, 
                     max_test_ep_len,
+                    record_video,
                 )).to(device)
                 avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
 
@@ -71,8 +76,8 @@ def train(
                 recon_loss = policy.compute_loss(rgbs, low_dims, actions)
                 acc.backward(recon_loss)
                 optimizer.step(optimizer)
-                if policy.use_ema:
-                    policy.update_ema() # TODO
+                if policy.use_ema and batch_idx % policy.ema_interval == 0:
+                    policy.update_ema()
                 cum_recon_loss += recon_loss.detach() / print_interval
                 cum_load_time += load_time / print_interval
 
@@ -87,7 +92,7 @@ def train(
                 cum_recon_loss = torch.tensor(0).float().to(device)
                 cum_load_time = 0
                 clock = time()
-                acc.print('Train Epoch: {} [{}/{} ({:.0f}%)] Recon Loss: {:.5f} Reward: {:.5f} FPS:{:.5f} Load Pertentage:{:.5f} LR:{}'.format(
+                acc.print('\nTrain Epoch: {} [{}/{} ({:.0f}%)] Recon Loss: {:.5f} Reward: {:.5f} FPS:{:.5f} Load Pertentage:{:.5f} LR:{}'.format(
                     epoch, 
                     batch_idx * bs_per_gpu * acc.num_processes, 
                     dataset_len, 
@@ -98,19 +103,19 @@ def train(
                     avg_load_pecnt,
                     scheduler.get_last_lr()[0],
                 ))
-                if acc.is_main_process:
-                    writer.add_scalar("recon loss", avg_recon_loss, step)
-                    writer.add_scalar("reward", avg_reward, step)
-                    writer.add_scalar("learning rate", scheduler.get_last_lr()[0], step)
-                    writer.add_scalar("FPS", fps, step)
-                    writer.add_scalar("loading time in total time", avg_load_pecnt, step)
-                    with open(save_path+'step.json', 'w') as json_file:
-                        json.dump(step, json_file)
+                acc.log({
+                    "recon loss": avg_recon_loss,
+                    "reward": avg_reward,
+                    "learning rate": scheduler.get_last_lr()[0],
+                    "FPS": fps,
+                    "loading time in total time": avg_load_pecnt,
+                })
             batch_idx += 1
-            step += 1
             batch, load_time = prefetcher.next()
             if do_profile:
                 prof.step()
                 if batch_idx == 28:
                     prof.stop()
+                    acc.print("Profiling log saved in ", str(save_path/'prof'))
+                    acc.print("Visualize the profiling log by tensorboard with torch_tb_profiler plugin, see https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html")
         scheduler.step()
