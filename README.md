@@ -31,6 +31,13 @@ We also have policies trained and tested on the [CALVIN](https://github.com/mees
 - Heavily optimize training speed of Florence-series models.
 - Support compilation.
 
+<details>
+  <summary> Profiling result of compiled Florence MDT DiT policy </summary>
+
+![图片](https://github.com/user-attachments/assets/0b7e1b60-eed0-495c-b00c-6a02ea9a0d43)
+
+</details>
+
 **[2024.7.30]** Add Florence policy with MLP action head & diffusion transformer action head (from Cheng Chi's Diffusion policy). Add RT-1 policy.  
 
 **[2024.7.16]** Add transformer version of Diffusion Policy.
