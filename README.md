@@ -105,7 +105,7 @@ We implement the following algorithms:
 <details>
   <summary> Chi Cheng's Diffusion Policy (UNet / Transformer). </summary>
 
-- [Original implementation]([https://github.com/google-research/robotics_transformer](https://github.com/real-stanford/diffusion_policy)).
+- [Original implementation](https://github.com/real-stanford/diffusion_policy).
 
 - Our architecture is a copy of Chi Cheng's network. We test it in our pipeline and it has the same performance. Note that diffusion policy trains 2 resnet visual encoders for 2 camera views from scratch, so we never freeze the visual encoders.
 	
