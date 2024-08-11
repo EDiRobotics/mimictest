@@ -53,7 +53,6 @@ if __name__ == '__main__':
     resid_pdrop = 0.1
     mlp_pdrop = 0.05
     n_layers = 4
-    block_size = 0 
     do_compile = False
     do_profile = False
 
@@ -133,7 +132,6 @@ if __name__ == '__main__':
         attn_pdrop=attn_pdrop,
         resid_pdrop=resid_pdrop,
         n_layers=n_layers,
-        block_size=block_size,
         mlp_pdrop=mlp_pdrop,
     ).to(device)
     policy = DiffusionPolicy(

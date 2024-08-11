@@ -24,7 +24,6 @@ class Attention(nn.Module):
             n_head: int,
             attn_pdrop: float,
             resid_pdrop: float,
-            block_size: int,
             causal: bool = False,
             bias=False,
             use_rot_embed: bool = False,
@@ -47,13 +46,6 @@ class Attention(nn.Module):
         self.n_head = n_head
         self.n_embd = n_embd
         self.causal = causal
-        # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
-        self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
-        if not self.flash:
-            print("WARNING: using slow attention. Flash Attention requires PyTorch >= 2.0")
-            # causal mask to ensure that attention is only applied to the left in the input sequence
-            self.register_buffer("bias", torch.tril(torch.ones(block_size, block_size))
-                                        .view(1, 1, block_size, block_size))
         self.use_rot_embed = use_rot_embed
         if self.use_rot_embed:
         # Update (12/2022): Rotary embedding has since been hugely successful, widely adopted in many large language models, including the largest in the world, PaLM. 
@@ -89,21 +81,8 @@ class Attention(nn.Module):
             q = self.rotary_pos_emb.rotate_queries_or_keys(q)
             k = self.rotary_pos_emb.rotate_queries_or_keys(k)
 
-        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
-        if self.flash:
-            # efficient attention using Flash Attention CUDA kernels
-            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=custom_attn_mask, dropout_p=self.attn_dropout.p if self.training else 0, is_causal=self.causal)
-        else:
-            # manual implementation of attention
-            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-            if self.causal:
-                if custom_attn_mask is not None:
-                    att = att.masked_fill(custom_attn_mask == 0, float('-inf'))
-                else:
-                    att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
-            att = F.softmax(att, dim=-1)
-            att = self.attn_dropout(att)
-            y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        # efficient attention using Flash Attention CUDA kernels
+        y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=custom_attn_mask, dropout_p=self.attn_dropout.p if self.training else 0, is_causal=self.causal)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection
@@ -138,7 +117,6 @@ class Block(nn.Module):
             attn_pdrop: float, 
             resid_pdrop: float, 
             mlp_pdrop: float,
-            block_size: int, 
             causal: bool,
             use_cross_attention: bool = False,
             use_rot_embed: bool=False,
@@ -147,10 +125,10 @@ class Block(nn.Module):
         ):
         super().__init__()
         self.ln_1 = LayerNorm(n_embd, bias=bias)
-        self.attn = Attention(n_embd, n_heads, attn_pdrop, resid_pdrop, block_size, causal, bias, use_rot_embed, rotary_xpos)
+        self.attn = Attention(n_embd, n_heads, attn_pdrop, resid_pdrop, causal, bias, use_rot_embed, rotary_xpos)
         self.use_cross_attention = use_cross_attention
         if self.use_cross_attention:
-            self.cross_att = Attention(n_embd, n_heads, attn_pdrop, resid_pdrop, block_size, causal, bias, use_rot_embed, rotary_xpos)
+            self.cross_att = Attention(n_embd, n_heads, attn_pdrop, resid_pdrop, causal, bias, use_rot_embed, rotary_xpos)
             self.ln3 = nn.LayerNorm(n_embd)
         self.ln_2 = LayerNorm(n_embd, bias=bias)
         self.mlp = MLP(n_embd, bias, mlp_pdrop)
@@ -190,7 +168,6 @@ class ConditionedBlock(Block):
             attn_pdrop, 
             resid_pdrop, 
             mlp_pdrop, 
-            block_size, 
             causal, 
             film_cond_dim,
             use_cross_attention=False, 
@@ -198,7 +175,7 @@ class ConditionedBlock(Block):
             rotary_xpos=False, 
             bias=False # and any other arguments from the Block class
         ):
-        super().__init__(n_embd, n_heads, attn_pdrop, resid_pdrop, mlp_pdrop, block_size, causal,
+        super().__init__(n_embd, n_heads, attn_pdrop, resid_pdrop, mlp_pdrop, causal,
                          use_cross_attention=use_cross_attention, 
                          use_rot_embed=use_rot_embed, 
                          rotary_xpos=rotary_xpos, 
@@ -246,7 +223,6 @@ class TransformerFiLMDecoder(nn.Module):
             attn_pdrop: float,  
             resid_pdrop: float, 
             n_layers: int, 
-            block_size: int,
             bias: bool = False,
             use_rot_embed: bool = False,
             rotary_xpos: bool = False,
@@ -261,7 +237,6 @@ class TransformerFiLMDecoder(nn.Module):
             attn_pdrop, 
             resid_pdrop, 
             mlp_pdrop,
-            block_size,
             causal=True, 
             use_cross_attention=use_cross_attention,
             use_rot_embed=use_rot_embed,

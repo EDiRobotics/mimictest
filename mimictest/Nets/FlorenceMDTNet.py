@@ -19,7 +19,6 @@ class FlorenceMDTNet(nn.Module):
             attn_pdrop, 
             resid_pdrop,
             n_layers, 
-            block_size,
             mlp_pdrop,
         ):
         super().__init__()
@@ -55,7 +54,6 @@ class FlorenceMDTNet(nn.Module):
             attn_pdrop=attn_pdrop, 
             resid_pdrop=resid_pdrop,
             n_layers=n_layers, 
-            block_size=block_size,
             mlp_pdrop=mlp_pdrop,
         ) 
 
