@@ -22,7 +22,7 @@ We also have policies trained and tested on the [CALVIN](https://github.com/mees
 
 </details>
 
-**Please remember we build systems for you ヾ(^▽^*)). Feel free to ask @StarCycle if you have any question!**
+**Please remember we build systems for you ヾ(^▽^*)).** Feel free to ask [@StarCycle](https://github.com/StarCycle) if you have any question!
 
 ## News
 **[2024.8.9]** Several updates below. And we are merging the base Florence policy to HuggingFace LeRobot.
