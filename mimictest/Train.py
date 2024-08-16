@@ -82,7 +82,7 @@ def train(
                 loss = policy.compute_loss(rgbs, low_dims, actions)
                 acc.backward(loss)
                 if acc.sync_gradients:
-                    batch_metric['grad_norm'] = acc.clip_grad_norm_(policy.parameters(), max_grad_norm)
+                    batch_metric['grad_norm_before_clip'] = acc.clip_grad_norm_(policy.parameters(), max_grad_norm)
                 optimizer.step(optimizer)
                 if policy.use_ema and batch_idx % policy.ema_interval == 0:
                     policy.update_ema()
