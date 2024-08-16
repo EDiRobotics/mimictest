@@ -255,10 +255,9 @@ And then set `model_path` in the script, for example:
 model_path = "/path/to/downloaded/florence/folder"
 ```
 
-You need to install flash-attention. We recommend to download a pre-build wheel from [official release](https://github.com/Dao-AILab/flash-attention/releases), instead of building a wheel by yourself. For example (you should choose a wheel depending on your system):
+You need to install florence-specific dependencies, e.g., flash-attention. You can achieve it with:
 ```
-wget https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3+cu118torch2.4cxx11abiTRUE-cp39-cp39-linux_x86_64.whl
-pip install flash_attn-2.6.3+cu118torch2.4cxx11abiTRUE-cp39-cp39-linux_x86_64.whl
+pip install -e .[florence]
 ```
 
 </details>
@@ -274,10 +273,16 @@ accelerate launch Script/<the script you choose>.py
 
 ## Possible Installation Problems
 
-[](https://github.com/StarCycle/ParallelRobomimic#possible-problems)
-
+1. `GLIBCXX_3.4.30' not found
 ```
 ImportError: /opt/conda/envs/test/bin/../lib/libstdc++.so.6: version `GLIBCXX_3.4.30' not found (required by /lib/x86_64-linux-gnu/libLLVM-15.so.1)
 ```
-
 Please check [this link](https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin).
+
+2. Spend too much time compiling flash-attn
+   
+You can download a pre-build wheel from [official release](https://github.com/Dao-AILab/flash-attention/releases), instead of building a wheel by yourself. For example (you should choose a wheel depending on your system):
+```
+wget https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3+cu118torch2.4cxx11abiTRUE-cp39-cp39-linux_x86_64.whl
+pip install flash_attn-2.6.3+cu118torch2.4cxx11abiTRUE-cp39-cp39-linux_x86_64.whl
+```
