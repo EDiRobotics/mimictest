@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "mimictest"
+version = "0.1"
+dependencies = [
+    "diffusers",
+    "scipy",
+    "einops",
+    "opencv-python-headless",
+    "accelerate",
+    "moviepy",
+    "wandb",
+    "tqdm",
+    "cython<3",
+    "gymnasium",
+    "numpy<1.24",
+    "free-mujoco-py==2.1.6",
+    "stable-baselines3",
+    "robomimic",
+]
+
+[project.optional-dependencies]
+florence = [
+    "transformers",
+    "timm",
+    "flash-attn",
+]
+
+
+[tool.setuptools]
+packages = ["mimictest"]
