@@ -69,6 +69,7 @@ if __name__ == '__main__':
     lr_max = 2e-5
     warmup_steps = 5
     weight_decay = 1e-4
+    max_grad_norm = 10
     print_interval = 60
     record_video = False
 
@@ -168,6 +169,7 @@ if __name__ == '__main__':
             save_interval=save_interval,
             print_interval=print_interval,
             bs_per_gpu=bs_per_gpu,
+            max_grad_norm=max_grad_norm,
             record_video=record_video,
             do_profile=do_profile,
         )

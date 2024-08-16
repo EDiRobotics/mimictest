@@ -23,7 +23,7 @@ class FlorenceMDTNet(nn.Module):
         ):
         super().__init__()
 
-        self.net = AutoModelForCausalLM.from_pretrained(path, trust_remote_code=True, local_files_only=True)
+        self.net = AutoModelForCausalLM.from_pretrained(path, trust_remote_code=True)
         if freeze_vision_tower:
             for param in self.net.vision_tower.parameters():
                 param.requires_grad = False
@@ -32,7 +32,7 @@ class FlorenceMDTNet(nn.Module):
                 param.requires_grad = False
 
         os.environ['TOKENIZERS_PARALLELISM'] = 'true'
-        self.tokenizer = AutoProcessor.from_pretrained(path, trust_remote_code=True, local_files_only=True).tokenizer
+        self.tokenizer = AutoProcessor.from_pretrained(path, trust_remote_code=True).tokenizer
         prompt_token_ids = self.tokenizer(
             "<Action>",
             return_tensors="pt",

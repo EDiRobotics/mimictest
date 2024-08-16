@@ -44,9 +44,9 @@ if __name__ == '__main__':
     limits = ComputeLimit(dataset_path, abs_mode)
 
     # Network
-    model_path = Path("/root/dataDisk/Florence-2-base")
+    model_path = Path("microsoft/Florence-2-base")
     freeze_vision_tower = True
-    freeze_florence = False
+    freeze_florence = True
     num_action_query = 10
     n_heads = 8
     attn_pdrop = 0.3
@@ -68,12 +68,13 @@ if __name__ == '__main__':
 
     # Training
     num_training_epochs = 1000
-    save_interval = 50 
+    save_interval = 80 
     load_epoch_id = 0
     gradient_accumulation_steps = 1
     lr_max = 1e-4
     warmup_steps = 5
     weight_decay = 1e-4
+    max_grad_norm = 10
     print_interval = 79
     record_video = False
 
@@ -179,6 +180,7 @@ if __name__ == '__main__':
             save_interval=save_interval,
             print_interval=print_interval,
             bs_per_gpu=bs_per_gpu,
+            max_grad_norm=max_grad_norm,
             record_video=record_video,
             do_profile=do_profile,
         )

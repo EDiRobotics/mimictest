@@ -1,3 +1,4 @@
+import copy
 import json
 import glob
 from time import time
@@ -23,6 +24,7 @@ def train(
     save_interval,
     print_interval,
     bs_per_gpu,
+    max_grad_norm,
     record_video,
     do_profile,
 ):
@@ -61,11 +63,15 @@ def train(
                 )).to(device)
                 avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
 
-        cum_recon_loss = torch.tensor(0).float().to(device)
-        cum_load_time = 0 
+        batch_metric = {
+            'loss': 0,
+            'grad_norm': 0,
+            'dataload_time': 0,
+        } 
+        avg_metric = copy.deepcopy(batch_metric) # average over batches
         clock = time()
         batch_idx = 0
-        batch, load_time = prefetcher.next()
+        batch, batch_metric['dataload_time'] = prefetcher.next()
         while batch is not None:
             with acc.accumulate(policy.net):
                 policy.net.train()
@@ -73,45 +79,42 @@ def train(
                 rgbs = preprocessor.rgb_process(batch['rgbs'], train=True)
                 low_dims = preprocessor.low_dim_normalize(batch['low_dims'])
                 actions = preprocessor.action_normalize(batch['actions'])
-                recon_loss = policy.compute_loss(rgbs, low_dims, actions)
-                acc.backward(recon_loss)
+                loss = policy.compute_loss(rgbs, low_dims, actions)
+                acc.backward(loss)
+                if acc.sync_gradients:
+                    batch_metric['grad_norm'] = acc.clip_grad_norm_(policy.parameters(), max_grad_norm)
                 optimizer.step(optimizer)
                 if policy.use_ema and batch_idx % policy.ema_interval == 0:
                     policy.update_ema()
-                cum_recon_loss += recon_loss.detach() / print_interval
-                cum_load_time += load_time / print_interval
+                batch_metric['loss'] = loss.detach()
+                for key in batch_metric:
+                    avg_metric[key] += batch_metric[key] / print_interval
 
             if batch_idx % print_interval == 0 and batch_idx != 0:
-                load_pecnt = torch.tensor(cum_load_time / (time()-clock)).to(device)
-                fps = (bs_per_gpu*print_interval) / (time()-clock)
-
-                avg_recon_loss = acc.gather_for_metrics(cum_recon_loss).mean()
-                avg_load_pecnt = acc.gather_for_metrics(load_pecnt).mean()
-                fps = acc.gather_for_metrics(torch.tensor(fps).to(device)).sum()
-
-                cum_recon_loss = torch.tensor(0).float().to(device)
-                cum_load_time = 0
+                avg_metric['dataload_percent_first_gpu'] = avg_metric['dataload_time'] * print_interval / (time()-clock)
+                avg_metric['lr'] = scheduler.get_last_lr()[0]
+                avg_metric['reward'] = avg_reward
+                avg_metric['fps_first_gpu'] = (bs_per_gpu*print_interval) / (time()-clock)
                 clock = time()
-                acc.print('\nTrain Epoch: {} [{}/{} ({:.0f}%)] Recon Loss: {:.5f} Reward: {:.5f} FPS:{:.5f} Load Pertentage:{:.5f} LR:{}'.format(
+
+                for key in batch_metric:
+                    if key != 'dataload_time':
+                        avg_metric[key] = acc.gather_for_metrics(avg_metric[key]).mean()
+                text = '\nTrain Epoch: {} [{}/{} ({:.0f}%)]'.format(
                     epoch, 
                     batch_idx * bs_per_gpu * acc.num_processes, 
                     dataset_len, 
                     100. * batch_idx * bs_per_gpu * acc.num_processes / dataset_len, 
-                    avg_recon_loss, 
-                    avg_reward,
-                    fps,
-                    avg_load_pecnt,
-                    scheduler.get_last_lr()[0],
-                ))
-                acc.log({
-                    "recon loss": avg_recon_loss,
-                    "reward": avg_reward,
-                    "learning rate": scheduler.get_last_lr()[0],
-                    "FPS": fps,
-                    "loading time in total time": avg_load_pecnt,
-                })
+                )
+                for key in avg_metric:
+                    text = text + ' {}: {:.5f}'.format(key, avg_metric[key])
+                acc.print(text)
+                acc.log(avg_metric)
+                for key in avg_metric:
+                    avg_metric[key] = 0 
+
             batch_idx += 1
-            batch, load_time = prefetcher.next()
+            batch, batch_metric['dataload_time'] = prefetcher.next()
             if do_profile:
                 prof.step()
                 if batch_idx == 28:

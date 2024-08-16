@@ -79,6 +79,7 @@ if __name__ == '__main__':
     gradient_accumulation_steps = 1
     lr_max = 2e-5
     warmup_steps = 5
+    max_grad_norm = 10
     weight_decay = 1e-4
     print_interval = 79
     record_video = False
@@ -190,6 +191,7 @@ if __name__ == '__main__':
             save_interval=save_interval,
             print_interval=print_interval,
             bs_per_gpu=bs_per_gpu,
+            max_grad_norm=max_grad_norm,
             record_video=record_video,
             do_profile=do_profile,
         )
