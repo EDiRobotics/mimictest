@@ -46,8 +46,9 @@ if __name__ == '__main__':
     # Network
     model_path = Path("microsoft/Florence-2-base")
     freeze_vision_tower = True
-    freeze_florence = True
+    freeze_florence = False
     num_action_query = 10
+    max_T = chunk_size
     n_heads = 8
     attn_pdrop = 0.3
     resid_pdrop = 0.1
@@ -76,6 +77,7 @@ if __name__ == '__main__':
     weight_decay = 1e-4
     max_grad_norm = 10
     print_interval = 79
+    do_watch_parameters = False
     record_video = False
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
@@ -129,6 +131,7 @@ if __name__ == '__main__':
         num_actions=num_actions_6d,
         num_action_query=num_action_query,
         lowdim_obs_dim=len(limits['low_dim_max']),
+        max_T=max_T,
         n_heads=n_heads,
         attn_pdrop=attn_pdrop,
         resid_pdrop=resid_pdrop,
@@ -149,7 +152,8 @@ if __name__ == '__main__':
         clip_sample=clip_sample,
         prediction_type=prediction_type,
     )
-    policy.load_pretrained(acc, save_path, load_epoch_id) # also set wandb here
+    policy.load_pretrained(acc, save_path, load_epoch_id)
+    policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
     optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
     scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
     policy.net, policy.ema_net, optimizer, loader = acc.prepare(

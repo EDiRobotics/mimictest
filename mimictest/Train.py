@@ -65,7 +65,7 @@ def train(
 
         batch_metric = {
             'loss': 0,
-            'grad_norm': 0,
+            'grad_norm_before_clip': 0,
             'dataload_time': 0,
         } 
         avg_metric = copy.deepcopy(batch_metric) # average over batches

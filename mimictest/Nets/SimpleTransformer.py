@@ -52,10 +52,7 @@ class Transformer(nn.Module):
     def __init__(self, ff_dim, head_dim, n_heads, n_blocks, max_T, drop_p, causal):
         super().__init__()
         self.blocks = nn.ModuleList([Block(ff_dim, head_dim, max_T, n_heads, drop_p, causal) for _ in range(n_blocks)])
-
-        devisor = 1 / torch.sqrt(torch.tensor(ff_dim, dtype=torch.float32))
-        self.pos_emb = nn.Parameter(torch.randn(1, max_T, ff_dim) * devisor)
-
+        self.pos_emb = nn.Parameter(torch.randn(1, max_T, ff_dim))
         self.apply(self._init_module)
 
     def _init_module(self, module):

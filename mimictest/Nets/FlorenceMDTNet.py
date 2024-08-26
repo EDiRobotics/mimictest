@@ -15,6 +15,7 @@ class FlorenceMDTNet(nn.Module):
             num_actions,
             num_action_query,
             lowdim_obs_dim,
+            max_T,
             n_heads, 
             attn_pdrop, 
             resid_pdrop,
@@ -50,6 +51,7 @@ class FlorenceMDTNet(nn.Module):
         self.low_dim_encoder = nn.Linear(lowdim_obs_dim, token_dim)
         self.noise_pred_net = TransformerFiLMDecoder(
             embed_dim=token_dim, 
+            max_T=max_T,
             n_heads=n_heads, 
             attn_pdrop=attn_pdrop, 
             resid_pdrop=resid_pdrop,

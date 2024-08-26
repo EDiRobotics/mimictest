@@ -60,6 +60,7 @@ if __name__ == '__main__':
     weight_decay = 1e-4
     max_grad_norm = 10
     print_interval = 66
+    do_watch_parameters = False
     record_video = False
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
@@ -118,7 +119,8 @@ if __name__ == '__main__':
         loss_func=torch.nn.functional.l1_loss,
         do_compile=do_compile,
     )
-    policy.load_pretrained(acc, save_path, load_epoch_id) # also set wandb here
+    policy.load_pretrained(acc, save_path, load_epoch_id)
+    policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
     optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
     scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
     policy.net, optimizer, loader = acc.prepare(

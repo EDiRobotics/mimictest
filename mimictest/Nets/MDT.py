@@ -26,11 +26,6 @@ class Attention(nn.Module):
             resid_pdrop: float,
             causal: bool = False,
             bias=False,
-            use_rot_embed: bool = False,
-            rotary_xpos: bool = False,
-            rotary_emb_dim = None,
-            rotary_xpos_scale_base = 512,
-            rotary_interpolation_factor = 1.,
         ):
         super().__init__()
         assert n_embd % n_head == 0
@@ -46,20 +41,6 @@ class Attention(nn.Module):
         self.n_head = n_head
         self.n_embd = n_embd
         self.causal = causal
-        self.use_rot_embed = use_rot_embed
-        if self.use_rot_embed:
-        # Update (12/2022): Rotary embedding has since been hugely successful, widely adopted in many large language models, including the largest in the world, PaLM. 
-        # However, it has been uncovered in the ALiBi paper that rotary embeddings cannot length extrapolate well. 
-        # This was recently addressed in <a href="https://arxiv.org/abs/2212.10554v1">a Microsoft research paper</a>. 
-        # They propose a way to unobtrusively add the same decay as in ALiBi, and found that this resolves the extrapolation problem.
-        # You can use it in this repository by setting `rotary_xpos = True`. Like ALiBi, it would enforce the attention to be local. You can set the receptive field with `rotary_xpos_scale_base` value, which defaults to `512`
-            rotary_emb_dim = max(default(rotary_emb_dim, self.n_head // 2), 32)
-            self.rotary_pos_emb = RotaryEmbedding(
-                rotary_emb_dim, 
-                use_xpos = rotary_xpos, 
-                xpos_scale_base = rotary_xpos_scale_base, 
-                interpolate_factor = rotary_interpolation_factor, 
-            ) 
 
     def forward(self, x, context=None, custom_attn_mask=None):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
@@ -75,11 +56,6 @@ class Attention(nn.Module):
             k = self.key(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
             q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
             v = self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-
-        # apply rotary stuff here if needed:
-        if self.use_rot_embed:
-            q = self.rotary_pos_emb.rotate_queries_or_keys(q)
-            k = self.rotary_pos_emb.rotate_queries_or_keys(k)
 
         # efficient attention using Flash Attention CUDA kernels
         y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=custom_attn_mask, dropout_p=self.attn_dropout.p if self.training else 0, is_causal=self.causal)
@@ -119,16 +95,14 @@ class Block(nn.Module):
             mlp_pdrop: float,
             causal: bool,
             use_cross_attention: bool = False,
-            use_rot_embed: bool=False,
-            rotary_xpos: bool = False,
             bias: bool = False, # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
         ):
         super().__init__()
         self.ln_1 = LayerNorm(n_embd, bias=bias)
-        self.attn = Attention(n_embd, n_heads, attn_pdrop, resid_pdrop, causal, bias, use_rot_embed, rotary_xpos)
+        self.attn = Attention(n_embd, n_heads, attn_pdrop, resid_pdrop, causal, bias)
         self.use_cross_attention = use_cross_attention
         if self.use_cross_attention:
-            self.cross_att = Attention(n_embd, n_heads, attn_pdrop, resid_pdrop, causal, bias, use_rot_embed, rotary_xpos)
+            self.cross_att = Attention(n_embd, n_heads, attn_pdrop, resid_pdrop, causal, bias)
             self.ln3 = nn.LayerNorm(n_embd)
         self.ln_2 = LayerNorm(n_embd, bias=bias)
         self.mlp = MLP(n_embd, bias, mlp_pdrop)
@@ -171,14 +145,10 @@ class ConditionedBlock(Block):
             causal, 
             film_cond_dim,
             use_cross_attention=False, 
-            use_rot_embed=False, 
-            rotary_xpos=False, 
             bias=False # and any other arguments from the Block class
         ):
         super().__init__(n_embd, n_heads, attn_pdrop, resid_pdrop, mlp_pdrop, causal,
                          use_cross_attention=use_cross_attention, 
-                         use_rot_embed=use_rot_embed, 
-                         rotary_xpos=rotary_xpos, 
                          bias=bias)
         self.adaLN_zero = AdaLNZero(film_cond_dim)
 
@@ -219,13 +189,12 @@ class TransformerFiLMDecoder(nn.Module):
     def __init__(
             self, 
             embed_dim: int, 
+            max_T: int,
             n_heads: int, 
             attn_pdrop: float,  
             resid_pdrop: float, 
             n_layers: int, 
             bias: bool = False,
-            use_rot_embed: bool = False,
-            rotary_xpos: bool = False,
             mlp_pdrop: float = 0,
             use_cross_attention: bool = True,
         ):
@@ -239,18 +208,18 @@ class TransformerFiLMDecoder(nn.Module):
             mlp_pdrop,
             causal=True, 
             use_cross_attention=use_cross_attention,
-            use_rot_embed=use_rot_embed,
-            rotary_xpos=rotary_xpos,
             bias=bias,
             film_cond_dim=embed_dim,
             ) 
             for _ in range(n_layers)]
         )
         self.time_emb = SinusoidalPosEmb(embed_dim)
+        self.pos_emb = nn.Parameter(torch.randn(1, max_T, embed_dim))
         self.ln = LayerNorm(embed_dim, bias)
 
     def forward(self, x, c, cond=None, custom_attn_mask=None):
         c = self.time_emb(c).unsqueeze(1)
+        x += self.pos_emb[:, :x.shape[1]]
         for layer in self.blocks:
             x = layer(x, c, cond, custom_attn_mask=custom_attn_mask)
         x = self.ln(x)
