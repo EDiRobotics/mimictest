@@ -228,7 +228,7 @@ pip install -e .
 Now, depending on the environment and model you want, Please perform the following steps.
 
 <details>
-  <summary> For Robomimic experiments </summary>
+  <summary> For Robomimic experiments. </summary>
 
 You need to install `robomimic` and `robosuite` via:
 ```
