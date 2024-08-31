@@ -215,16 +215,32 @@ Square task with professional demos:
 
 ## Installation
 
-To use `robosuite1.2`, we need a conda environment with python 3.8 or 3.9. You can use [mirror sites of Github](https://github.com/runningcheese/MirrorSite) to avoid the connection problem in some regions.
+You can use [mirror sites of Github](https://github.com/runningcheese/MirrorSite) to avoid the connection problem in some regions. You may try other python versions but I use python3.10 as an valid example here.
 ```
-conda create -n mimic python=3.9
+conda create -n mimic python=3.10
 conda activate mimic
+apt install curl git libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev software-properties-common net-tools unzip vim virtualenv wget xpra xserver-xorg-dev libglfw3-dev patchelf cmake
+conda install -c conda-forge gcc
 git clone https://github.com/EDiRobotics/mimictest
 cd mimictest
-apt install curl git libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev software-properties-common net-tools unzip vim virtualenv wget xpra xserver-xorg-dev libglfw3-dev patchelf cmake
 pip install -e .
-pip install robosuite@https://github.com/cheng-chi/robosuite/archive/277ab9588ad7a4f4b55cf75508b44aa67ec171f0.tar.gz
 ```
+
+Now, depending on the environment and model you want, Please perform the following steps.
+
+<details>
+  <summary> For Robomimic experiments. </summary>
+
+You need to install `robomimic` and `robosuite` via:
+```
+pip install -e[robomimic]
+cd ..
+git clone https://github.com/ARISE-Initiative/robomimic
+cd robomimic
+pip install -e .
+```
+
+We do not use `pip install robomimic` because the robomimic team has not updated their pypi release for a long time. Recent robosuite has turned to the DeepMind's Mujoco backend, and only the latest github Robomimic repository supports it. 
 
 You should also download dataset that contains `robomimic_image.zip` or `robomimic_lowdim.zip` from the [official link](https://diffusion-policy.cs.columbia.edu/data/training/) or [HuggingFace](https://huggingface.co/datasets/EDiRobotics/mimictest_data). In this example, I use the tool of [HF-Mirror](https://hf-mirror.com/). You can set the environment variable `export HF_ENDPOINT=https://hf-mirror.com` to avoid the connection problem in some regions.
 
@@ -241,8 +257,10 @@ If you only want to download a subset of the data, e.g., the square task with im
 ./hfd.sh EDiRobotics/mimictest_data --dataset --tool aria2c -x 9 --include robomimic_image/square.zip
 ```
 
+</details>
+
 <details>
-  <summary> You should also do these to use florence-based models. </summary>
+  <summary> For Florence-based models. </summary>
 
 To use florence-based models, you should download one of it from HuggingFace, for example:
 ```
@@ -277,7 +295,9 @@ accelerate launch Script/<the script you choose>.py
 ```
 ImportError: /opt/conda/envs/test/bin/../lib/libstdc++.so.6: version `GLIBCXX_3.4.30' not found (required by /lib/x86_64-linux-gnu/libLLVM-15.so.1)
 ```
-Please check [this link](https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin).
+You can try `conda install -c conda-forge gcc` which is a magical command that automatically install some dependencies. 
+
+Also check [this link](https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin).
 
 2. Spend too much time compiling flash-attn
    
@@ -286,3 +306,9 @@ You can download a pre-build wheel from [official release](https://github.com/Da
 wget https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3+cu118torch2.4cxx11abiTRUE-cp39-cp39-linux_x86_64.whl
 pip install flash_attn-2.6.3+cu118torch2.4cxx11abiTRUE-cp39-cp39-linux_x86_64.whl
 ```
+
+3. Cannot initialize a EGL device display
+```
+Cannot initialize a EGL device display. This likely means that your EGL driver does not support the PLATFORM_DEVICE extension, which is required for creating a headless rendering context.
+```
+You can try `conda install -c conda-forge gcc`.
