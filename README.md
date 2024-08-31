@@ -219,9 +219,10 @@ You can use [mirror sites of Github](https://github.com/runningcheese/MirrorSite
 ```
 conda create -n mimic python=3.10
 conda activate mimic
+apt install curl git libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev software-properties-common net-tools unzip vim virtualenv wget xpra xserver-xorg-dev libglfw3-dev patchelf cmake
+conda install -c conda-forge gcc
 git clone https://github.com/EDiRobotics/mimictest
 cd mimictest
-apt install curl git libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev software-properties-common net-tools unzip vim virtualenv wget xpra xserver-xorg-dev libglfw3-dev patchelf cmake
 pip install -e .
 ```
 
@@ -233,7 +234,13 @@ Now, depending on the environment and model you want, Please perform the followi
 You need to install `robomimic` and `robosuite` via:
 ```
 pip install -e[robomimic]
+cd ..
+git clone https://github.com/ARISE-Initiative/robomimic
+cd robomimic
+pip install -e .
 ```
+
+We do not use `pip install robomimic` because the robomimic team has not updated their pypi release for a long time. Recent robosuite has turned to the DeepMind's Mujoco backend, and only the latest github Robomimic repository supports it. 
 
 You should also download dataset that contains `robomimic_image.zip` or `robomimic_lowdim.zip` from the [official link](https://diffusion-policy.cs.columbia.edu/data/training/) or [HuggingFace](https://huggingface.co/datasets/EDiRobotics/mimictest_data). In this example, I use the tool of [HF-Mirror](https://hf-mirror.com/). You can set the environment variable `export HF_ENDPOINT=https://hf-mirror.com` to avoid the connection problem in some regions.
 
@@ -249,6 +256,7 @@ If you only want to download a subset of the data, e.g., the square task with im
 ```
 ./hfd.sh EDiRobotics/mimictest_data --dataset --tool aria2c -x 9 --include robomimic_image/square.zip
 ```
+
 </details>
 
 <details>
