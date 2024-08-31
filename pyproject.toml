@@ -21,7 +21,6 @@ florence = [
     "flash-attn",
 ]
 robomimic = [
-    "robomimic",
     "robosuite",
 ]
 pusht = [
