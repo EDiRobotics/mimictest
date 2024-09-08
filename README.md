@@ -215,12 +215,11 @@ Square task with professional demos:
 
 ## Installation
 
-You can use [mirror sites of Github](https://github.com/runningcheese/MirrorSite) to avoid the connection problem in some regions. You may try other python versions but I use python3.10 as an valid example here.
+You can use [mirror sites of Github](https://github.com/runningcheese/MirrorSite) to avoid the connection problem in some regions. With different simulators, it's recommended to use different python versions, which will be mentioned below.
 ```
-conda create -n mimic python=3.10
+conda create -n mimic python=3.x
 conda activate mimic
 apt install curl git libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev software-properties-common net-tools unzip vim virtualenv wget xpra xserver-xorg-dev libglfw3-dev patchelf cmake
-conda install -c conda-forge gcc
 git clone https://github.com/EDiRobotics/mimictest
 cd mimictest
 pip install -e .
@@ -231,16 +230,13 @@ Now, depending on the environment and model you want, Please perform the followi
 <details>
   <summary> For Robomimic experiments. </summary>
 
-You need to install `robomimic` and `robosuite` via:
+The recommended python version is 3.9. You need to install `robomimic` and `robosuite` via:
 ```
-pip install -e[robomimic]
-cd ..
-git clone https://github.com/ARISE-Initiative/robomimic
-cd robomimic
-pip install -e .
+pip install pip install robosuite@https://github.com/cheng-chi/robosuite/archive/277ab9588ad7a4f4b55cf75508b44aa67ec171f0.tar.gz
+pip install robomimic
 ```
 
-We do not use `pip install robomimic` because the robomimic team has not updated their pypi release for a long time. Recent robosuite has turned to the DeepMind's Mujoco backend, and only the latest github Robomimic repository supports it. 
+Recent robosuite has turned to the DeepMind's Mujoco 3 backend but we are still using the old version with Mujoco 2.1. This is because the dataset is recorded in Mujoco 2.1, which has slighlyly dynamics difference with Mujoco 3. 
 
 You should also download dataset that contains `robomimic_image.zip` or `robomimic_lowdim.zip` from the [official link](https://diffusion-policy.cs.columbia.edu/data/training/) or [HuggingFace](https://huggingface.co/datasets/EDiRobotics/mimictest_data). In this example, I use the tool of [HF-Mirror](https://hf-mirror.com/). You can set the environment variable `export HF_ENDPOINT=https://hf-mirror.com` to avoid the connection problem in some regions.
 
@@ -295,7 +291,7 @@ accelerate launch Script/<the script you choose>.py
 ```
 ImportError: /opt/conda/envs/test/bin/../lib/libstdc++.so.6: version `GLIBCXX_3.4.30' not found (required by /lib/x86_64-linux-gnu/libLLVM-15.so.1)
 ```
-You can try `conda install -c conda-forge gcc` which is a magical command that automatically install some dependencies. 
+You can try `conda install -c conda-forge gcc=12.1` which is a magical command that automatically install some dependencies. 
 
 Also check [this link](https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin).
 
@@ -311,4 +307,24 @@ pip install flash_attn-2.6.3+cu118torch2.4cxx11abiTRUE-cp39-cp39-linux_x86_64.wh
 ```
 Cannot initialize a EGL device display. This likely means that your EGL driver does not support the PLATFORM_DEVICE extension, which is required for creating a headless rendering context.
 ```
-You can try `conda install -c conda-forge gcc`.
+You can try `conda install -c conda-forge gcc=12.1`.
+
+4. fatal error: GL/osmesa.h: No such file or directory
+```
+ /tmp/pip-install-rsxccpmh/mujoco-py/mujoco_py/gl/osmesashim.c:1:23: fatal error: GL/osmesa.h: No such file or directory
+    compilation terminated.
+    error: command 'gcc' failed with exit status 1
+```
+You can try `conda install -c conda-forge mesalib glew glfw` or check this [link](https://github.com/ethz-asl/reinmav-gym/issues/35).
+
+5. cannot find -lGL
+```
+ /home/ubuntu/anaconda3/compiler_compat/ld: cannot find -lGL
+  collect2: error: ld returned 1 exit status
+  error: command 'gcc' failed with exit status 1
+```
+You can try `conda install -c conda-forge mesa-libgl-devel-cos7-x86_64` or check this [link](https://stackoverflow.com/questions/59016606/ld-cant-find-lgl-error-during-installation).
+
+6. `SystemError: initialization of _internal failed without raising an exception`.
+
+You can simply `pip -U numba` or this [link](https://stackoverflow.com/questions/74947992/how-to-remove-the-error-systemerror-initialization-of-internal-failed-without).
