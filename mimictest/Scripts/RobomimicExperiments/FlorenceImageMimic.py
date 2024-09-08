@@ -8,16 +8,16 @@ from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
 from mimictest.Utils.AccelerateFix import AsyncStep
 from mimictest.Utils.PreProcess import PreProcess
-from mimictest.Utils.RobomimicDataset import CustomMimicDataset, DataPrefetcher
-from mimictest.Utils.ComputeLimit import ComputeLimit
+from mimictest.Datasets.RobomimicDataset import CustomMimicDataset, ComputeLimit
+from mimictest.Datasets.DataPrefetcher import DataPrefetcher
 from mimictest.Wrappers.BasePolicy import BasePolicy
-from mimictest.Nets.RT1 import RT1
-from mimictest.Simulation.ParallelEnv import ParallelMimic
+from mimictest.Nets.FlorenceNet import FlorenceNet
+from mimictest.Simulation.ParallelMimic import ParallelMimic
 from mimictest.Train import train
 from mimictest.Evaluation import Evaluation
 
 if __name__ == '__main__':
-    # Script-specific settings (general settings stored in 
+    # Script-specific settings 
     mode = 'train' # 'train' or 'eval'
 
     # Saving path
@@ -45,19 +45,8 @@ if __name__ == '__main__':
     limits = ComputeLimit(dataset_path, abs_mode)
 
     # Network
-    # select from https://pytorch.org/vision/main/models/efficientnetv2.html
-    # or https://pytorch.org/vision/main/models/efficientnet.html
-    efficientnet_version = "efficientnet_v2_s"
-    FiLM_cond_channel = 1 # We don't use it in Robomimic but you can enable it with language-conditioned tasks 
-    depth = 8
-    vision_token_dim = 512
-    ff_dim = 128
-    n_heads = 2
-    head_dim = 64
-    max_T = 128
-    token_learner_num_output_tokens = 8
-    drop_prob = 0.1
-    freeze_vision_tower = False
+    model_path = Path("/root/dataDisk/Florence-2-base")
+    freeze_vision_tower = True
     do_compile = False
     do_profile = False
 
@@ -66,20 +55,19 @@ if __name__ == '__main__':
     save_interval = 50 
     load_epoch_id = 0
     gradient_accumulation_steps = 1
-    lr_max = 2e-5
+    lr_max = 1e-4
     warmup_steps = 5
     weight_decay = 1e-4
     max_grad_norm = 10
-    print_interval = 60
+    print_interval = 66
     do_watch_parameters = False
     record_video = False
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
     num_eval_ep = 6
-    test_chunk_size = 1
-    max_test_ep_len = 400
-    smooth_factor = 0.01
+    test_chunk_size = 8
+    max_test_ep_len = 50
 
     # Preparation
     kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
@@ -90,14 +78,15 @@ if __name__ == '__main__':
     )
     device = acc.device
     preprocessor = PreProcess(
-        desired_rgb_shape,
-        crop_shape,
-        limits['low_dim_max'],
-        limits['low_dim_min'],
-        limits['action_max'],
-        limits['action_min'],
-        abs_mode,
-        device,
+        desired_rgb_shape=desired_rgb_shape,
+        crop_shape=crop_shape,
+        low_dim_max=limits['low_dim_max'],
+        low_dim_min=limits['low_dim_min'],
+        action_max=limits['action_max'],
+        action_min=limits['action_min'],
+        enable_6d_rot=True,
+        abs_mode=abs_mode,
+        device=device,
     )
     envs = ParallelMimic(dataset_path, num_envs, abs_mode)
     eva = Evaluation(
@@ -119,20 +108,11 @@ if __name__ == '__main__':
         num_workers=workers_per_gpu,
         drop_last=True,     
     )
-    net = RT1(
-        efficientnet_version=efficientnet_version,
-        FiLM_cond_channel=FiLM_cond_channel,
-        lowdim_obs_num=len(limits['low_dim_max']),
+    net = FlorenceNet(
+        path=model_path,
+        lowdim_obs_dim=len(limits['low_dim_max']),
         num_actions=num_actions_6d,
         chunk_size=chunk_size,
-        depth=depth,
-        vision_token_dim=vision_token_dim,
-        ff_dim=ff_dim,
-        n_heads=n_heads,
-        head_dim=head_dim,
-        max_T=max_T,
-        token_learner_num_output_tokens=token_learner_num_output_tokens,
-        drop_prob=drop_prob,
         freeze_vision_tower=freeze_vision_tower,
     ).to(device)
     policy = BasePolicy(
@@ -142,7 +122,7 @@ if __name__ == '__main__':
     )
     policy.load_pretrained(acc, save_path, load_epoch_id)
     policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
-    optimizer = torch.optim.AdamW(policy.net.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
+    optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
     scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
     policy.net, optimizer, loader = acc.prepare(
         policy.net, 

@@ -2,22 +2,23 @@ import os
 from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, random_split
+from transformers import AutoProcessor, AutoModelForCausalLM
 from transformers import get_constant_schedule_with_warmup
 from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
 from mimictest.Utils.AccelerateFix import AsyncStep
 from mimictest.Utils.PreProcess import PreProcess
-from mimictest.Utils.RobomimicDataset import CustomMimicDataset, DataPrefetcher
-from mimictest.Utils.ComputeLimit import ComputeLimit
-from mimictest.Wrappers.DiffusionPolicy import DiffusionPolicy
-from mimictest.Nets.Chi_Transformer import Chi_Transformer
-from mimictest.Simulation.ParallelEnv import ParallelMimic
+from mimictest.Datasets.RobomimicDataset import CustomMimicDataset, ComputeLimit
+from mimictest.Datasets.DataPrefetcher import DataPrefetcher
+from mimictest.Wrappers.BasePolicy import BasePolicy
+from mimictest.Nets.RT1 import RT1
+from mimictest.Simulation.ParallelMimic import ParallelMimic
 from mimictest.Train import train
 from mimictest.Evaluation import Evaluation
 
 if __name__ == '__main__':
     # Script-specific settings (general settings stored in 
-    mode = 'train' # or 'eval'
+    mode = 'train' # 'train' or 'eval'
 
     # Saving path
     save_path = Path('./Save/')
@@ -30,7 +31,7 @@ if __name__ == '__main__':
     else:
         file_name = 'image.hdf5'
     dataset_path = Path('/root/dataDisk/square/ph/') / file_name
-    bs_per_gpu = 1280
+    bs_per_gpu = 432
     desired_rgb_shape = 84
     crop_shape = 76
     workers_per_gpu = 8
@@ -44,48 +45,40 @@ if __name__ == '__main__':
     limits = ComputeLimit(dataset_path, abs_mode)
 
     # Network
-    resnet_name = 'resnet18'
-    max_T = chunk_size
-    n_layer = 8
-    n_cond_layers = 0  # >0: use transformer encoder for cond, otherwise use MLP
-    n_head = 4
-    n_emb = 256
-    p_drop_emb = 0.0
-    p_drop_attn = 0.3
-    causal_attn = True
-    obs_as_cond = True
-    time_as_cond = True # if false, use BERT like encoder only arch, time as input
+    # select from https://pytorch.org/vision/main/models/efficientnetv2.html
+    # or https://pytorch.org/vision/main/models/efficientnet.html
+    efficientnet_version = "efficientnet_v2_s"
+    FiLM_cond_channel = 1 # We don't use it in Robomimic but you can enable it with language-conditioned tasks 
+    depth = 8
+    vision_token_dim = 512
+    ff_dim = 128
+    n_heads = 2
+    head_dim = 64
+    max_T = 128
+    token_learner_num_output_tokens = 8
+    drop_prob = 0.1
+    freeze_vision_tower = False
     do_compile = False
     do_profile = False
-
-    # Diffusion
-    diffuser_train_steps = 100
-    diffuser_infer_steps = 100
-    diffuser_solver = "ddpm"
-    beta_schedule = "squaredcos_cap_v2"
-    prediction_type = 'epsilon'
-    clip_sample = True
-    ema_interval = 10
-    loss_func = torch.nn.functional.mse_loss
 
     # Training
     num_training_epochs = 1000
     save_interval = 50 
     load_epoch_id = 0
     gradient_accumulation_steps = 1
-    lr_max = 3e-4
+    lr_max = 2e-5
     warmup_steps = 5
     weight_decay = 1e-4
     max_grad_norm = 10
-    print_interval = 22
+    print_interval = 60
     do_watch_parameters = False
     record_video = False
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
     num_eval_ep = 6
-    test_chunk_size = 8
-    max_test_ep_len = 50
+    test_chunk_size = 1
+    max_test_ep_len = 400
     smooth_factor = 0.01
 
     # Preparation
@@ -97,14 +90,15 @@ if __name__ == '__main__':
     )
     device = acc.device
     preprocessor = PreProcess(
-        desired_rgb_shape,
-        crop_shape,
-        limits['low_dim_max'],
-        limits['low_dim_min'],
-        limits['action_max'],
-        limits['action_min'],
-        abs_mode,
-        device,
+        desired_rgb_shape=desired_rgb_shape,
+        crop_shape=crop_shape,
+        low_dim_max=limits['low_dim_max'],
+        low_dim_min=limits['low_dim_min'],
+        action_max=limits['action_max'],
+        action_min=limits['action_min'],
+        enable_6d_rot=True,
+        abs_mode=abs_mode,
+        device=device,
     )
     envs = ParallelMimic(dataset_path, num_envs, abs_mode)
     eva = Evaluation(
@@ -126,46 +120,36 @@ if __name__ == '__main__':
         num_workers=workers_per_gpu,
         drop_last=True,     
     )
-    transformer = Chi_Transformer(
-        obs_horizon=obs_horizon,
-        lowdim_obs_dim=len(limits['low_dim_max']),
-        num_actions=num_actions_6d,
-        max_T=max_T,
-        resnet_name=resnet_name,
-        n_layer=n_layer,
-        n_head=n_head,
-        n_emb=n_emb,
-        p_drop_emb=p_drop_emb,
-        p_drop_attn=p_drop_attn,
-        causal_attn=causal_attn,
-        time_as_cond=time_as_cond,
-        obs_as_cond=obs_as_cond,
-        n_cond_layers=n_cond_layers,
-    ).to(device)
-    policy = DiffusionPolicy(
-        net=transformer,
-        loss_func=loss_func,
-        do_compile=do_compile,
+    net = RT1(
+        efficientnet_version=efficientnet_version,
+        FiLM_cond_channel=FiLM_cond_channel,
+        lowdim_obs_num=len(limits['low_dim_max']),
         num_actions=num_actions_6d,
         chunk_size=chunk_size,
-        scheduler_name=diffuser_solver,
-        num_train_steps=diffuser_train_steps,
-        num_infer_steps=diffuser_infer_steps,
-        ema_interval=ema_interval,
-        beta_schedule=beta_schedule,
-        clip_sample=clip_sample,
-        prediction_type=prediction_type,
+        depth=depth,
+        vision_token_dim=vision_token_dim,
+        ff_dim=ff_dim,
+        n_heads=n_heads,
+        head_dim=head_dim,
+        max_T=max_T,
+        token_learner_num_output_tokens=token_learner_num_output_tokens,
+        drop_prob=drop_prob,
+        freeze_vision_tower=freeze_vision_tower,
+    ).to(device)
+    policy = BasePolicy(
+        net=net,
+        loss_func=torch.nn.functional.l1_loss,
+        do_compile=do_compile,
     )
-    policy.load_pretrained(acc, save_path, load_epoch_id) 
+    policy.load_pretrained(acc, save_path, load_epoch_id)
     policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
-    optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
+    optimizer = torch.optim.AdamW(policy.net.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
     scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
-    policy.net, policy.ema_net, optimizer, loader = acc.prepare(
+    policy.net, optimizer, loader = acc.prepare(
         policy.net, 
-        policy.ema_net, 
         optimizer, 
         loader, 
-        device_placement=[True, True, True, False],
+        device_placement=[True, True, False],
     )
     optimizer.step = AsyncStep
     prefetcher = DataPrefetcher(loader, device)

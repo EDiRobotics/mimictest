@@ -241,6 +241,7 @@ class ConditionalUnet1D(nn.Module):
 
 class Chi_UNet1D(nn.Module):
     def __init__(self,
+                camera_num,
                 obs_horizon,
                 lowdim_obs_dim,
                 num_actions,
@@ -251,12 +252,13 @@ class Chi_UNet1D(nn.Module):
                 n_groups):
 
         super().__init__()
-        self.agent_ve = get_resnet(resnet_name)
-        self.agent_ve = replace_bn_with_gn(self.agent_ve)
-        self.gripper_ve = get_resnet(resnet_name)
-        self.gripper_ve = replace_bn_with_gn(self.gripper_ve)
-        vision_feature_dim = self.agent_ve.layer4[-1].bn2.weight.shape[0]
-        obs_dim = obs_horizon*(vision_feature_dim*2 + lowdim_obs_dim)
+        self.vision_encoders = nn.ModuleList([])
+        for _ in range(camera_num):
+            vision_encoder = get_resnet(resnet_name)
+            vision_encoder = replace_bn_with_gn(vision_encoder)
+            self.vision_encoders.append(vision_encoder)
+        vision_feature_dim = self.vision_encoders[0].layer4[-1].bn2.weight.shape[0]
+        obs_dim = obs_horizon*(vision_feature_dim*camera_num + lowdim_obs_dim)
         self.noise_pred_net = ConditionalUnet1D(
             input_dim=num_actions,
             global_cond_dim=obs_dim, 
@@ -270,11 +272,11 @@ class Chi_UNet1D(nn.Module):
         if obs_features is None:
             # encoder vision features
             B, T, V, C, H, W = rgb.shape
-            rgb_agent = rgb[:, :, 0]
-            rgb_gripper = rgb[:, :, 1]
-            rgb_agent = rgb_agent.view(B*T, C, H, W)
-            rgb_gripper = rgb_gripper.view(B*T, C, H, W)
-            image_features = torch.cat((self.agent_ve(rgb_agent), self.gripper_ve(rgb_gripper)), dim=1) # (b*t, d)
+            image_features = []
+            for view_id in range(V):
+                rgb_view = rgb[:, :, view_id].view(B*T, C, H, W)
+                image_features.append(self.vision_encoders[view_id](rgb_view))
+            image_features = torch.cat(image_features, dim=1) # (b*t, d)
             image_features = image_features.view(B, -1) # (b, t*d)
 
             # concatenate vision feature and low-dim obs

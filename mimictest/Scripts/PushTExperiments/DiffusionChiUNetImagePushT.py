@@ -2,17 +2,16 @@ import os
 from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, random_split
-from torch.utils.tensorboard import SummaryWriter
 from transformers import get_constant_schedule_with_warmup
 from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
 from mimictest.Utils.AccelerateFix import AsyncStep
 from mimictest.Utils.PreProcess import PreProcess
-from mimictest.Utils.RobomimicDataset import CustomMimicDataset, DataPrefetcher
-from mimictest.Utils.ComputeLimit import ComputeLimit
+from mimictest.Datasets.PushTDataset import PushTImageDataset
+from mimictest.Datasets.DataPrefetcher import DataPrefetcher
+from mimictest.Simulation.ParallelPushT import ParallelPushT
 from mimictest.Wrappers.DiffusionPolicy import DiffusionPolicy
-from mimictest.Nets.FlorenceOctoNet import FlorenceOctoNet
-from mimictest.Simulation.ParallelEnv import ParallelMimic
+from mimictest.Nets.Chi_UNet1D import Chi_UNet1D
 from mimictest.Train import train
 from mimictest.Evaluation import Evaluation
 
@@ -26,39 +25,26 @@ if __name__ == '__main__':
 
     # Dataset
     abs_mode = True # relative EE action space or absolute EE action space
-    if abs_mode:
-        file_name = 'image_abs.hdf5'
-    else:
-        file_name = 'image.hdf5'
-    dataset_path = Path('/root/dataDisk/square/ph/') / file_name
-    bs_per_gpu = 360
-    desired_rgb_shape = 84
-    crop_shape = 76
+    file_name = 'pusht_cchi_v7_replay.zarr'
+    dataset_path = Path('/root/dataDisk/pusht/') / file_name
+    bs_per_gpu = 800
+    desired_rgb_shape = 96
+    crop_shape = 96
     workers_per_gpu = 8
     cache_ratio = 2
 
     # Space
-    num_actions = 7
-    num_actions_6d = 10
-    obs_horizon = 2
+    camera_num = 2
+    num_actions = 2
+    obs_horizon = 1
     chunk_size = 16
-    limits = ComputeLimit(dataset_path, abs_mode)
 
     # Network
-    model_path = "/root/dataDisk/Florence-2-base"
-    freeze_vision_tower = True
-    freeze_florence = False
-    num_action_query = 10
-    max_T = chunk_size
-    n_layer = 8
-    n_cond_layers = 0  # >0: use transformer encoder for cond, otherwise use MLP
-    n_head = 4
-    n_emb = 256
-    p_drop_emb = 0.0
-    p_drop_attn = 0.3
-    causal_attn = True
-    obs_as_cond = True
-    time_as_cond = True # if false, use BERT like encoder only arch, time as input
+    resnet_name = 'resnet18'
+    diffusion_step_embed_dim = 128
+    down_dims = [512, 1024, 2048]
+    kernel_size = 5
+    n_groups = 8
     do_compile = False
     do_profile = False
 
@@ -74,22 +60,22 @@ if __name__ == '__main__':
 
     # Training
     num_training_epochs = 1000
-    save_interval = 50
-    load_epoch_id = 300
+    save_interval = 50 
+    load_epoch_id = 0
     gradient_accumulation_steps = 1
-    lr_max = 2e-5
+    lr_max = 1e-4
     warmup_steps = 5
-    max_grad_norm = 10
     weight_decay = 1e-4
-    print_interval = 79
+    max_grad_norm = 10
+    print_interval = 29
     do_watch_parameters = False
-    record_video = False
+    record_video = True
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
-    num_eval_ep = 6
+    num_eval_ep = 1
     test_chunk_size = 8
-    max_test_ep_len = 50
+    max_test_ep_len = 200
 
     # Preparation
     kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
@@ -99,17 +85,19 @@ if __name__ == '__main__':
         # kwargs_handlers=[kwargs],
     )
     device = acc.device
+    dataset = PushTImageDataset(dataset_path, chunk_size, obs_horizon, chunk_size)
     preprocessor = PreProcess(
-        desired_rgb_shape,
-        crop_shape,
-        limits['low_dim_max'],
-        limits['low_dim_min'],
-        limits['action_max'],
-        limits['action_min'],
-        abs_mode,
-        device,
+        desired_rgb_shape=desired_rgb_shape,
+        crop_shape=crop_shape,
+        low_dim_max=torch.from_numpy(dataset.stats['agent_pos']['max']),
+        low_dim_min=torch.from_numpy(dataset.stats['agent_pos']['min']),
+        action_max=torch.from_numpy(dataset.stats['action']['max']),
+        action_min=torch.from_numpy(dataset.stats['action']['min']),
+        enable_6d_rot=False,
+        abs_mode=abs_mode,
+        device=device,
     )
-    envs = ParallelMimic(dataset_path, num_envs, abs_mode)
+    envs = ParallelPushT(num_envs)
     eva = Evaluation(
         envs, 
         num_envs, 
@@ -120,7 +108,6 @@ if __name__ == '__main__':
         save_path,
         device,
     )
-    dataset = CustomMimicDataset(dataset_path, obs_horizon, chunk_size, start_ratio=0, end_ratio=1)
     loader = DataLoader(
         dataset=dataset,
         sampler=None, 
@@ -129,29 +116,22 @@ if __name__ == '__main__':
         num_workers=workers_per_gpu,
         drop_last=True,     
     )
-    net = FlorenceOctoNet(
-        path=model_path,
-        freeze_vision_tower=freeze_vision_tower,
-        freeze_florence=freeze_florence,
-        lowdim_obs_dim=len(limits['low_dim_max']),
-        num_actions=num_actions_6d,
-        num_action_query=num_action_query,
-        max_T=max_T,
-        n_layer=n_layer,
-        n_head=n_head,
-        n_emb=n_emb,
-        p_drop_emb=p_drop_emb,
-        p_drop_attn=p_drop_attn,
-        causal_attn=causal_attn,
-        time_as_cond=time_as_cond,
-        obs_as_cond=obs_as_cond,
-        n_cond_layers=n_cond_layers,
+    unet = Chi_UNet1D(
+        camera_num=camera_num,
+        obs_horizon=obs_horizon,
+        lowdim_obs_dim=len(dataset.stats['agent_pos']['max']),
+        num_actions=num_actions,
+        resnet_name=resnet_name,
+        diffusion_step_embed_dim=diffusion_step_embed_dim,
+        down_dims=down_dims,
+        kernel_size=kernel_size,
+        n_groups=n_groups,
     ).to(device)
     policy = DiffusionPolicy(
-        net=net,
+        net=unet,
         loss_func=loss_func,
         do_compile=do_compile,
-        num_actions=num_actions_6d,
+        num_actions=num_actions,
         chunk_size=chunk_size,
         scheduler_name=diffuser_solver,
         num_train_steps=diffuser_train_steps,

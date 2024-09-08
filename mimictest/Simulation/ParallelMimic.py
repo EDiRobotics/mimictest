@@ -6,7 +6,7 @@ import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.file_utils as FileUtils
 from robomimic.config import config_factory
 import robomimic.utils.obs_utils as ObsUtils
-from mimictest.Simulation.gym_wrapper import GymWrapper
+from mimictest.Simulation.robosuite_gym_wrapper import GymWrapper
 
 def make_env_initializers(num_envs, env_meta):
     config = config_factory(algo_name="bc")
@@ -47,17 +47,21 @@ class ParallelMimic():
     def reset(self):
         obs = self.envs.reset()
         obs = self.combine_obs(obs)
+        obs['low_dim'] = np.concatenate((obs['robot0_eef_pos'], obs['robot0_eef_quat'], obs['robot0_gripper_qpos']), axis=1)
         if self.render:
             obs['agentview_image'] = np.flip(obs['agentview_image'], axis=1)
             obs['robot0_eye_in_hand_image'] = np.flip(obs['robot0_eye_in_hand_image'], axis=1)
+            obs['rgb'] = np.stack((obs['agentview_image'], obs['robot0_eye_in_hand_image']), axis=1)
         return obs 
 
     def step(self, action):
         obs, rw, done, info = self.envs.step(action)
         obs = self.combine_obs(obs)
+        obs['low_dim'] = np.concatenate((obs['robot0_eef_pos'], obs['robot0_eef_quat'], obs['robot0_gripper_qpos']), axis=1)
         if self.render:
             obs['agentview_image'] = np.flip(obs['agentview_image'], axis=1)
             obs['robot0_eye_in_hand_image'] = np.flip(obs['robot0_eye_in_hand_image'], axis=1)
+            obs['rgb'] = np.stack((obs['agentview_image'], obs['robot0_eye_in_hand_image']), axis=1)
         return obs, rw, done, info
 
 if __name__ == '__main__':
@@ -66,7 +70,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_envs', type=int, help='number of environments you want to run')
     parser.add_argument('--abs_mode', action='store_true', help='speficy it if you use absolute action space')
     cfg = parser.parse_args()
-    envs = ParallelEnvs(cfg.dataset_path, cfg.num_envs, cfg.abs_mode)
+    envs = ParallelMimic(cfg.dataset_path, cfg.num_envs, cfg.abs_mode)
     obs = envs.reset()
     actions = np.random.randn(cfg.num_envs, 7)
     obs, rw, done, info = envs.step(actions)
