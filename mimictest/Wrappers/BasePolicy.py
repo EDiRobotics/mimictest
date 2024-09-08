@@ -46,7 +46,7 @@ class BasePolicy():
 
     def load_pretrained(self, acc, path, load_epoch_id):
         if os.path.isfile(path / f'policy_{load_epoch_id}.pth'):
-            ckpt = torch.load(path / f'policy_{load_epoch_id}.pth')
+            ckpt = torch.load(path / f'policy_{load_epoch_id}.pth', map_location='cpu')
             self.net.load_state_dict(ckpt["net"])
             if self.use_ema:
                 self.ema_net.load_state_dict(ckpt["ema"])
@@ -59,17 +59,18 @@ class BasePolicy():
             run_id = json.load(open(path / "wandb_id.json", "r"))
             acc.init_trackers(
                 project_name="mimictest", 
-                init_kwargs={"wandb": {"id": run_id, "resume": "must"}}
+                init_kwargs={"wandb": {"id": run_id, "resume": "allow"}}
             )
-            tracker = acc.get_tracker("wandb")
-            if do_watch_parameters:
-                wandb.watch(self.net, log="all", log_freq=save_interval)
+            if acc.is_main_process:
+                if do_watch_parameters:
+                    wandb.watch(self.net, log="all", log_freq=save_interval)
         else: 
             acc.init_trackers(project_name="mimictest")
-            tracker = acc.get_tracker("wandb")
-            json.dump(tracker.run.id, open(path / "wandb_id.json", "w"))
-            if do_watch_parameters:
-                wandb.watch(self.net, log="all", log_freq=save_interval)
+            if acc.is_main_process:
+                tracker = acc.get_tracker("wandb")
+                json.dump(tracker.run.id, open(path / "wandb_id.json", "w"))
+                if do_watch_parameters:
+                    wandb.watch(self.net, log="all", log_freq=save_interval)
 
     def compute_loss(self, rgb, low_dim, actions):
         pred = self.net(rgb, low_dim)

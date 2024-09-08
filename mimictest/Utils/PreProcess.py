@@ -39,6 +39,7 @@ class PreProcess():
             low_dim_min,
             action_max, 
             action_min, 
+            enable_6d_rot,
             abs_mode,
             device,
         ):
@@ -54,6 +55,7 @@ class PreProcess():
         self.action_max = action_max.to(device)
         self.low_dim_min = low_dim_min.to(device)
         self.low_dim_max = low_dim_max.to(device)
+        self.enable_6d_rot = enable_6d_rot
         self.abs_mode = abs_mode
     
     def rgb_process(self, rgb, train=True):
@@ -77,15 +79,18 @@ class PreProcess():
         return (low_dim - self.low_dim_min) / (self.low_dim_max - self.low_dim_min)
     
     def action_normalize(self, action):
-        if self.abs_mode:
-            new_action = action_axis_to_6d(action)
-        else:
-            new_action = action_euler_to_6d(action)
-        return (new_action - self.action_min) / (self.action_max - self.action_min)
+        if self.enable_6d_rot:
+            if self.abs_mode:
+                action = action_axis_to_6d(action)
+            else:
+                action = action_euler_to_6d(action)
+        return (action - self.action_min) / (self.action_max - self.action_min)
 
     def action_back_normalize(self, action):
         action = action * (self.action_max - self.action_min) + self.action_min
-        if self.abs_mode:
-            return action_6d_to_axis(action)
-        else:
-            return action_6d_to_euler(action)
+        if self.enable_6d_rot:
+            if self.abs_mode:
+                action = action_6d_to_axis(action)
+            else:
+                action = action_6d_to_euler(action)
+        return action

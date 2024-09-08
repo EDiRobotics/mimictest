@@ -1,5 +1,4 @@
-[build-system]
-requires = ["setuptools", "wheel"]
+
 
 [project]
 name = "mimictest"
@@ -20,11 +19,9 @@ florence = [
     "timm",
     "flash-attn",
 ]
-robomimic = [
-    "robosuite",
-]
 pusht = [
     "gym-pusht",
+    "zarr",
 ]
 
 
