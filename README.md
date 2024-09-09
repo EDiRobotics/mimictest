@@ -303,6 +303,8 @@ wget https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash
 pip install flash_attn-2.6.3+cu118torch2.4cxx11abiTRUE-cp39-cp39-linux_x86_64.whl
 ```
 
+When installing pytorch, make sure the torch cuda version and your cuda driver version are the same (e.g., 11.8).
+
 3. Cannot initialize a EGL device display
 ```
 Cannot initialize a EGL device display. This likely means that your EGL driver does not support the PLATFORM_DEVICE extension, which is required for creating a headless rendering context.
