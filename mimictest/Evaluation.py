@@ -7,13 +7,13 @@ from moviepy.editor import ImageSequenceClip
 from tqdm import tqdm
 
 class Evaluation():
-    def __init__(self, envs, num_envs, preprcs, obs_horizon, chunk_size, num_actions, save_path, device):
+    def __init__(self, envs, num_envs, preprcs, obs_horizon, action_horizon, num_actions, save_path, device):
         self.envs = envs
         self.num_envs = num_envs
         self.preprcs = preprcs
         self.device = device
         self.obs_horizon = obs_horizon
-        self.chunk_size = chunk_size
+        self.action_horizon = action_horizon
         self.num_actions = num_actions
         self.save_path = save_path
         return None
@@ -35,8 +35,10 @@ class Evaluation():
                     videos = []
                     for camera_id in range(self.num_cameras):
                         videos.append([[] for i in range(self.num_envs)])
-                
-                for t in tqdm(range(max_test_ep_len), desc=f"run episode {ep+1} of {num_eval_ep}", disable=not acc.is_main_process):
+
+                t = 0
+                progress_bar = tqdm(total=max_test_ep_len, desc=f"run episode {ep+1} of {num_eval_ep}", disable=not acc.is_main_process)
+                while t < max_test_ep_len:
                     # Add RGB image to placeholder 
                     rgb = torch.from_numpy(obs['rgb'])
                     rgb = rearrange(rgb, 'b v h w c -> b v c h w').contiguous()
@@ -56,18 +58,23 @@ class Evaluation():
                         raise ValueError(f"Evaluation.py: buffer len {len(rgb_buffer)}")
                     pred_actions = policy.infer(torch.stack(rgb_buffer, dim=1), torch.stack(low_dim_buffer, dim=1))
                     pred_actions = self.preprcs.action_back_normalize(pred_actions).cpu().numpy()
-                    for action_id in range(self.chunk_size):
+                    for action_id in range(self.action_horizon[0], self.action_horizon[1]):
                         obs, rw, done, info = self.envs.step(pred_actions[:, action_id])
                         for env_id in range(self.num_envs):
                             if rewards[env_id] == 0 and rw[env_id] == 1:
                                 rewards[env_id] = 1
-                                print(f'gpu{acc.process_index}_episode{ep}_env{env_id}: get reward! step {t*self.chunk_size+action_id}')
+                                print(f'gpu{acc.process_index}_episode{ep}_env{env_id}: get reward! step {t}')
                         if record_video:
                             for env_id in range(self.num_envs):
                                 if rewards[env_id] == 0:
                                     for camera_id in range(self.num_cameras):
                                         img = obs['rgb'][env_id, camera_id].astype(np.uint8).copy()
                                         videos[camera_id][env_id].append(img)
+                        t += 1
+                        progress_bar.update(1)
+                        if t >= max_test_ep_len:
+                            break
+                progress_bar.close()
 
                 # If there are multiple episodes in max_test_ep_len, only conut the 1st episode
                 rewards = np.where(rewards > 0, 1, rewards)

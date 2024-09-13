@@ -4,7 +4,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 import gymnasium as gym
 import gym_pusht
 
-def make_env_initializers(num_envs):
+def make_env_initializers(num_envs, max_episode_steps):
     initializers = []
     for i in range(num_envs):
         def thunk():
@@ -12,15 +12,16 @@ def make_env_initializers(num_envs):
                 "gym_pusht/PushT-v0", 
                 obs_type="pixels_agent_pos", 
                 render_mode="rgb_array",
+                max_episode_steps=max_episode_steps,
             )
             return env
         initializers.append(thunk)
     return initializers
 
 class ParallelPushT():
-    def __init__(self, num_envs):
+    def __init__(self, num_envs, max_episode_steps):
         self.num_envs = num_envs
-        initializers = make_env_initializers(num_envs)
+        initializers = make_env_initializers(num_envs, max_episode_steps)
         self.envs = SubprocVecEnv(initializers)
 
     def reset(self):

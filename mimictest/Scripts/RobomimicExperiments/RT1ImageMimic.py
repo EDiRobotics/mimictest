@@ -77,7 +77,7 @@ if __name__ == '__main__':
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
     num_eval_ep = 6
-    test_chunk_size = 1
+    action_horizon = [0, 1]
     max_test_ep_len = 400
     smooth_factor = 0.01
 
@@ -106,7 +106,7 @@ if __name__ == '__main__':
         num_envs, 
         preprocessor, 
         obs_horizon,
-        test_chunk_size, 
+        action_horizon, 
         num_actions, 
         save_path,
         device,
@@ -186,4 +186,4 @@ if __name__ == '__main__':
             record_video=True)
         ).to(device)
         avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
-        acc.print(f'chunk size {test_chunk_size}, success rate {avg_reward}')
+        acc.print(f'action horizon {action_horizon}, success rate {avg_reward}')

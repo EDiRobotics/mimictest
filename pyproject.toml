@@ -1,9 +1,9 @@
-
-
 [project]
 name = "mimictest"
 version = "0.1"
 dependencies = [
+    "torch",
+    "torchvision",
     "diffusers",
     "einops",
     "transformers",
