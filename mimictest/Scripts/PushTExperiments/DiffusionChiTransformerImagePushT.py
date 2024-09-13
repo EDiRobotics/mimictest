@@ -10,7 +10,7 @@ from mimictest.Utils.PreProcess import PreProcess
 from mimictest.Datasets.PushTDataset import PushTImageDataset
 from mimictest.Datasets.DataPrefetcher import DataPrefetcher
 from mimictest.Wrappers.DiffusionPolicy import DiffusionPolicy
-from mimictest.Nets.Chi_UNet1D import Chi_UNet1D
+from mimictest.Nets.Chi_Transformer import Chi_Transformer
 from mimictest.Simulation.ParallelPushT import ParallelPushT
 from mimictest.Train import train
 from mimictest.Evaluation import Evaluation
@@ -36,15 +36,21 @@ if __name__ == '__main__':
     # Space
     camera_num = 1
     num_actions = 2
-    obs_horizon = 1
+    obs_horizon = 2
     chunk_size = 16
 
     # Network
     resnet_name = 'resnet18'
-    diffusion_step_embed_dim = 128
-    down_dims = [512, 1024, 2048]
-    kernel_size = 5
-    n_groups = 8
+    max_T = chunk_size
+    n_layer = 8
+    n_cond_layers = 0  # >0: use transformer encoder for cond, otherwise use MLP
+    n_head = 4
+    n_emb = 256
+    p_drop_emb = 0.0
+    p_drop_attn = 0.3
+    causal_attn = True
+    obs_as_cond = True
+    time_as_cond = True # if false, use BERT like encoder only arch, time as input
     do_compile = False
     do_profile = False
 
@@ -60,21 +66,21 @@ if __name__ == '__main__':
 
     # Training
     num_training_epochs = 1000
-    save_interval = 50 
-    load_epoch_id = 50
+    save_interval = 100 
+    load_epoch_id = 0
     gradient_accumulation_steps = 1
     lr_max = 1e-4
     warmup_steps = 5
     weight_decay = 1e-4
     max_grad_norm = 10
-    print_interval = 374
+    print_interval = 350
     do_watch_parameters = False
     record_video = False
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
     num_eval_ep = 6
-    action_horizon = [0, 8]
+    action_horizon = [1, 9]
     max_test_ep_len = 300
 
     # Preparation
@@ -116,19 +122,25 @@ if __name__ == '__main__':
         num_workers=workers_per_gpu,
         drop_last=True,     
     )
-    unet = Chi_UNet1D(
+    transformer = Chi_Transformer(
         camera_num=camera_num,
         obs_horizon=obs_horizon,
         lowdim_obs_dim=len(dataset.stats['agent_pos']['max']),
         num_actions=num_actions,
+        max_T=max_T,
         resnet_name=resnet_name,
-        diffusion_step_embed_dim=diffusion_step_embed_dim,
-        down_dims=down_dims,
-        kernel_size=kernel_size,
-        n_groups=n_groups,
+        n_layer=n_layer,
+        n_head=n_head,
+        n_emb=n_emb,
+        p_drop_emb=p_drop_emb,
+        p_drop_attn=p_drop_attn,
+        causal_attn=causal_attn,
+        time_as_cond=time_as_cond,
+        obs_as_cond=obs_as_cond,
+        n_cond_layers=n_cond_layers,
     ).to(device)
     policy = DiffusionPolicy(
-        net=unet,
+        net=transformer,
         loss_func=loss_func,
         do_compile=do_compile,
         num_actions=num_actions,
@@ -141,7 +153,7 @@ if __name__ == '__main__':
         clip_sample=clip_sample,
         prediction_type=prediction_type,
     )
-    policy.load_pretrained(acc, save_path, load_epoch_id)
+    policy.load_pretrained(acc, save_path, load_epoch_id) 
     policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
     optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
     scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
@@ -187,4 +199,4 @@ if __name__ == '__main__':
             record_video=True)
         ).to(device)
         avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
-        acc.print(f'action_horizon {action_horizon}, success rate {avg_reward}')
+        acc.print(f'action horizon {action_horizon}, success rate {avg_reward}')
