@@ -18,6 +18,23 @@ class Evaluation():
         self.save_path = save_path
         return None
 
+    def fill_buffer(self, obs):
+        rgb = torch.from_numpy(obs['rgb'])
+        rgb = rearrange(rgb, 'b v h w c -> b v c h w').contiguous()
+        rgb = self.preprcs.rgb_process(rgb, train=False).to(self.device)
+        low_dim = torch.from_numpy(obs['low_dim']).float()
+        low_dim = self.preprcs.low_dim_normalize(low_dim.to(self.device))
+        if len(self.rgb_buffer) == 0: # Fill the buffer 
+            for i in range(self.obs_horizon):
+                self.rgb_buffer.append(rgb)
+                self.low_dim_buffer.append(low_dim)
+        elif len(self.rgb_buffer) == self.obs_horizon: # Update the buffer
+            self.rgb_buffer.pop(0)
+            self.rgb_buffer.append(rgb)
+            self.low_dim_buffer.pop(0)
+            self.low_dim_buffer.append(low_dim)
+        else:
+            raise ValueError(f"Evaluation.py: buffer len {len(self.rgb_buffer)}")
     def evaluate_on_env(self, acc, policy, epoch, num_eval_ep, max_test_ep_len, record_video=False):
         if policy.use_ema:
             policy.ema_net.eval()
@@ -27,9 +44,10 @@ class Evaluation():
         with torch.no_grad():
             for ep in range(num_eval_ep):
                 rewards = np.zeros((self.num_envs))
-                rgb_buffer = [] 
-                low_dim_buffer = []
+                self.rgb_buffer = [] 
+                self.low_dim_buffer = []
                 obs = self.envs.reset()
+                self.fill_buffer(obs)
                 self.num_cameras = obs['rgb'].shape[1]
                 if record_video:
                     videos = []
@@ -39,27 +57,11 @@ class Evaluation():
                 t = 0
                 progress_bar = tqdm(total=max_test_ep_len, desc=f"run episode {ep+1} of {num_eval_ep}", disable=not acc.is_main_process)
                 while t < max_test_ep_len:
-                    # Add RGB image to placeholder 
-                    rgb = torch.from_numpy(obs['rgb'])
-                    rgb = rearrange(rgb, 'b v h w c -> b v c h w').contiguous()
-                    rgb = self.preprcs.rgb_process(rgb, train=False).to(self.device)
-                    low_dim = torch.from_numpy(obs['low_dim']).float()
-                    low_dim = self.preprcs.low_dim_normalize(low_dim.to(self.device))
-                    if len(rgb_buffer) == 0: # Fill the buffer 
-                        for i in range(self.obs_horizon):
-                            rgb_buffer.append(rgb)
-                            low_dim_buffer.append(low_dim)
-                    elif len(rgb_buffer) == self.obs_horizon: # Update the buffer
-                        rgb_buffer.pop(0)
-                        rgb_buffer.append(rgb)
-                        low_dim_buffer.pop(0)
-                        low_dim_buffer.append(low_dim)
-                    else:
-                        raise ValueError(f"Evaluation.py: buffer len {len(rgb_buffer)}")
-                    pred_actions = policy.infer(torch.stack(rgb_buffer, dim=1), torch.stack(low_dim_buffer, dim=1))
+                    pred_actions = policy.infer(torch.stack(self.rgb_buffer, dim=1), torch.stack(self.low_dim_buffer, dim=1))
                     pred_actions = self.preprcs.action_back_normalize(pred_actions).cpu().numpy()
                     for action_id in range(self.action_horizon[0], self.action_horizon[1]):
                         obs, rw, done, info = self.envs.step(pred_actions[:, action_id])
+                        self.fill_buffer(obs)
                         for env_id in range(self.num_envs):
                             if rewards[env_id] == 0 and rw[env_id] == 1:
                                 rewards[env_id] = 1
