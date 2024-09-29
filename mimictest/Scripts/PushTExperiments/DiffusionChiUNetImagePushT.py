@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, random_split
-from transformers import get_constant_schedule_with_warmup
+from transformers import get_cosine_schedule_with_warmup
 from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
 from mimictest.Utils.AccelerateFix import AsyncStep
@@ -29,20 +29,23 @@ if __name__ == '__main__':
     dataset_path = Path('/root/autodl-tmp/pusht/') / file_name
     bs_per_gpu = 64
     desired_rgb_shape = 96
-    crop_shape = 96
+    crop_shape = 84
     workers_per_gpu = 12
     cache_ratio = 2
 
     # Space
     camera_num = 1
     num_actions = 2
-    obs_horizon = 1
+    obs_horizon = 2
     chunk_size = 16
 
     # Network
-    resnet_name = 'resnet18'
+    vision_backbone = 'resnet18'
+    pretrained_backbone_weights = None
+    use_group_norm = True
+    spatial_softmax_num_keypoints = 32
     diffusion_step_embed_dim = 128
-    down_dims = [512, 1024, 2048]
+    down_dims = [256, 512, 1024]
     kernel_size = 5
     n_groups = 8
     do_compile = False
@@ -59,9 +62,9 @@ if __name__ == '__main__':
     loss_func = torch.nn.functional.mse_loss
 
     # Training
-    num_training_epochs = 1000
+    num_training_epochs = 500
     save_interval = 50 
-    load_epoch_id = 50
+    load_epoch_id = 0
     gradient_accumulation_steps = 1
     lr_max = 1e-4
     warmup_steps = 5
@@ -74,7 +77,7 @@ if __name__ == '__main__':
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
     num_eval_ep = 6
-    action_horizon = [0, 8]
+    action_horizon = [1, 9]
     max_test_ep_len = 300
 
     # Preparation
@@ -85,7 +88,12 @@ if __name__ == '__main__':
         # kwargs_handlers=[kwargs],
     )
     device = acc.device
-    dataset = PushTImageDataset(dataset_path, chunk_size, obs_horizon, chunk_size)
+    dataset = PushTImageDataset(
+        dataset_path, 
+        chunk_size, 
+        obs_horizon, 
+        action_horizon[1] - action_horizon[0],
+    )
     preprocessor = PreProcess(
         desired_rgb_shape=desired_rgb_shape,
         crop_shape=crop_shape,
@@ -121,7 +129,11 @@ if __name__ == '__main__':
         obs_horizon=obs_horizon,
         lowdim_obs_dim=len(dataset.stats['agent_pos']['max']),
         num_actions=num_actions,
-        resnet_name=resnet_name,
+        vision_backbone=vision_backbone,
+        pretrained_backbone_weights=pretrained_backbone_weights,
+        input_img_shape=(crop_shape, crop_shape),
+        use_group_norm=use_group_norm, 
+        spatial_softmax_num_keypoints=spatial_softmax_num_keypoints,
         diffusion_step_embed_dim=diffusion_step_embed_dim,
         down_dims=down_dims,
         kernel_size=kernel_size,
@@ -144,7 +156,11 @@ if __name__ == '__main__':
     policy.load_pretrained(acc, save_path, load_epoch_id)
     policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
     optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
-    scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
+    scheduler = get_cosine_schedule_with_warmup(
+        optimizer, 
+        num_warmup_steps=warmup_steps, 
+        num_training_steps=num_training_epochs,
+    )
     policy.net, policy.ema_net, optimizer, loader = acc.prepare(
         policy.net, 
         policy.ema_net, 
@@ -184,7 +200,7 @@ if __name__ == '__main__':
             epoch=0,
             num_eval_ep=num_eval_ep, 
             max_test_ep_len=max_test_ep_len, 
-            record_video=True)
+            record_video=False)
         ).to(device)
         avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
         acc.print(f'action_horizon {action_horizon}, success rate {avg_reward}')

@@ -2,7 +2,7 @@ from typing import Tuple, Sequence, Dict, Union, Optional, Callable
 import math
 import torch
 import torch.nn as nn
-from mimictest.Nets.ResNet import get_resnet, replace_bn_with_gn
+from mimictest.Nets.DiffusionRgbEncoder import DiffusionRgbEncoder
 
 class SinusoidalPosEmb(nn.Module):
     def __init__(self, dim):
@@ -245,7 +245,11 @@ class Chi_UNet1D(nn.Module):
                 obs_horizon,
                 lowdim_obs_dim,
                 num_actions,
-                resnet_name,
+                vision_backbone,
+                pretrained_backbone_weights,
+                input_img_shape,
+                use_group_norm, 
+                spatial_softmax_num_keypoints,
                 diffusion_step_embed_dim,
                 down_dims,
                 kernel_size,
@@ -254,10 +258,15 @@ class Chi_UNet1D(nn.Module):
         super().__init__()
         self.vision_encoders = nn.ModuleList([])
         for _ in range(camera_num):
-            vision_encoder = get_resnet(resnet_name)
-            vision_encoder = replace_bn_with_gn(vision_encoder)
+            vision_encoder = DiffusionRgbEncoder(
+                vision_backbone, 
+                pretrained_backbone_weights, 
+                input_img_shape, 
+                use_group_norm, 
+                spatial_softmax_num_keypoints,
+            )
             self.vision_encoders.append(vision_encoder)
-        vision_feature_dim = self.vision_encoders[0].layer4[-1].bn2.weight.shape[0]
+        vision_feature_dim = self.vision_encoders[0].feature_dim
         obs_dim = obs_horizon*(vision_feature_dim*camera_num + lowdim_obs_dim)
         self.noise_pred_net = ConditionalUnet1D(
             input_dim=num_actions,
