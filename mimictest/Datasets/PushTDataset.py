@@ -12,6 +12,7 @@
 import numpy as np
 import torch
 import zarr
+
 def create_sample_indices(
         episode_ends:np.ndarray, sequence_length:int,
         pad_before: int=0, pad_after: int=0):
@@ -60,6 +61,7 @@ def sample_sequence(train_data, sequence_length,
         result[key] = data
     return result
 
+# normalize data
 def get_data_stats(data):
     data = data.reshape(-1,data.shape[-1])
     stats = {
@@ -67,6 +69,12 @@ def get_data_stats(data):
         'max': np.max(data, axis=0)
     }
     return stats
+
+def normalize_data(data, stats):
+    return data
+
+def unnormalize_data(ndata, stats):
+    return ndata
 
 # dataset
 class PushTImageDataset(torch.utils.data.Dataset):
@@ -85,8 +93,7 @@ class PushTImageDataset(torch.utils.data.Dataset):
         # (N,3,96,96)
 
         # (N, D)
-        self.train_data = {
-            'image': train_image_data,
+        train_data = {
             # first two dims of state vector are agent (i.e. gripper) locations
             'agent_pos': dataset_root['data']['state'][:,:2],
             'action': dataset_root['data']['action'][:]
@@ -101,13 +108,19 @@ class PushTImageDataset(torch.utils.data.Dataset):
             pad_before=obs_horizon-1,
             pad_after=action_horizon-1)
 
-        # compute statistics
+        # compute statistics and normalized data to [-1,1]
         stats = dict()
-        for key, data in self.train_data.items():
+        normalized_train_data = dict()
+        for key, data in train_data.items():
             stats[key] = get_data_stats(data)
+            normalized_train_data[key] = normalize_data(data, stats[key])
+
+        # images are already normalized
+        normalized_train_data['image'] = train_image_data
 
         self.indices = indices
         self.stats = stats
+        self.normalized_train_data = normalized_train_data
         self.pred_horizon = pred_horizon
         self.action_horizon = action_horizon
         self.obs_horizon = obs_horizon
@@ -120,9 +133,9 @@ class PushTImageDataset(torch.utils.data.Dataset):
         buffer_start_idx, buffer_end_idx, \
             sample_start_idx, sample_end_idx = self.indices[idx]
 
-        # get data using these indices
+        # get nomralized data using these indices
         nsample = sample_sequence(
-            train_data=self.train_data,
+            train_data=self.normalized_train_data,
             sequence_length=self.pred_horizon,
             buffer_start_idx=buffer_start_idx,
             buffer_end_idx=buffer_end_idx,
@@ -132,7 +145,7 @@ class PushTImageDataset(torch.utils.data.Dataset):
 
         # discard unused observations
         nsample['rgbs'] = nsample['image'][:self.obs_horizon, np.newaxis, :].copy()
-        nsample['low_dims'] = nsample['agent_pos'][:self.obs_horizon,:].copy()
+        nsample['low_dims'] = nsample['agent_pos'][:self.obs_horizon, :].copy()
         nsample['actions'] = nsample['action'].copy()
         del nsample['image']
         del nsample['agent_pos']
