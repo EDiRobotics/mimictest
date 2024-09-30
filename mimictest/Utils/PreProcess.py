@@ -72,11 +72,12 @@ class PreProcess():
             rgb = self.train_transforms(rgb)
         else:
             rgb = self.eval_transforms(rgb)
-        rgb = rgb.float()*(1/255.)
+        rgb = rgb.float() / 127.5 - 1 # scale to [-1, 1]
         return rgb
 
     def low_dim_normalize(self, low_dim):
         low_dim = (low_dim - self.low_dim_min) / (self.low_dim_max - self.low_dim_min)
+        low_dim = low_dim * 2 - 1
         return low_dim
     
     def action_normalize(self, action):
@@ -86,9 +87,11 @@ class PreProcess():
             else:
                 action = action_euler_to_6d(action)
         action = (action - self.action_min) / (self.action_max - self.action_min)
+        action = action * 2 - 1
         return action
 
     def action_back_normalize(self, action):
+        action = (action + 1) * 0.5
         action = action * (self.action_max - self.action_min) + self.action_min
         if self.enable_6d_rot:
             if self.abs_mode:
