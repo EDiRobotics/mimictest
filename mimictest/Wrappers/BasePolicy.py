@@ -10,6 +10,7 @@ class BasePolicy():
             loss_func,
             do_compile,
         ):
+        self.do_compile = do_compile
         if do_compile:
             self.net = torch.compile(net)
         else:
@@ -34,23 +35,18 @@ class BasePolicy():
         acc.wait_for_everyone()
         if hasattr(acc.unwrap_model(self.net), '_orig_mod'): # the model has been compiled
             ckpt = {"net": acc.unwrap_model(self.net)._orig_mod.state_dict()}
-            if self.use_ema:
-                self.ema.copy_to(self.ema_net.parameters())
-                ckpt["ema"] = acc.unwrap_model(self.ema_net)._orig_mod.state_dict()
         else:
             ckpt = {"net": acc.unwrap_model(self.net).state_dict()}
-            if self.use_ema:
-                self.ema.copy_to(self.ema_net.parameters())
-                ckpt["ema"] = acc.unwrap_model(self.ema_net).state_dict()
         acc.save(ckpt, path / f'policy_{epoch_id}.pth')
 
     def load_pretrained(self, acc, path, load_epoch_id):
         if os.path.isfile(path / f'policy_{load_epoch_id}.pth'):
             ckpt = torch.load(path / f'policy_{load_epoch_id}.pth', map_location='cpu')
-            self.net.load_state_dict(ckpt["net"])
-            if self.use_ema:
-                self.ema_net.load_state_dict(ckpt["ema"])
-            acc.print('load ', path / f'policy_{load_epoch_id}.pth')
+            if self.do_compile:
+                missing_keys, unexpected_keys = self.net._orig_mod.load_state_dict(ckpt["net"], strict=False)
+            else:
+                missing_keys, unexpected_keys = self.net.load_state_dict(ckpt["net"], strict=False)
+            acc.print('load ', path / f'policy_{load_epoch_id}.pth', '\nmissing ', missing_keys, '\nunexpected ', unexpected_keys)
         else: 
             acc.print(path / f'policy_{load_epoch_id}.pth', 'does not exist. Initialize new checkpoint')
 
