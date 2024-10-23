@@ -87,7 +87,6 @@ if __name__ == '__main__':
     num_eval_ep = 6
     action_horizon = [0, 8]
     max_test_ep_len = 400
-    smooth_factor = 0.01
 
     # Preparation
     kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)

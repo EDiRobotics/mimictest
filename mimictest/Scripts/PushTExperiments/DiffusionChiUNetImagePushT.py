@@ -28,16 +28,31 @@ if __name__ == '__main__':
     file_name = 'pusht_cchi_v7_replay.zarr'
     dataset_path = Path('/root/autodl-tmp/pusht/') / file_name
     bs_per_gpu = 64
-    desired_rgb_shape = 96
-    crop_shape = 84
     workers_per_gpu = 12
     cache_ratio = 2
 
     # Space
     camera_num = 1
     num_actions = 2
+    lowdim_obs_dim = 2
     obs_horizon = 2
     chunk_size = 16
+    process_configs = {
+        'rgb': {
+            'rgb_shape': (96, 96),
+            'crop_shape': (84, 84),
+            'max': torch.tensor(1.0),
+            'min': torch.tensor(0.0),
+        },
+        'low_dim': {
+            'max': None, # to be filled
+            'min': None,
+        },
+        'action': {
+            'max': None, # to be filled
+            'min': None,
+        },
+    }
 
     # Network
     vision_backbone = 'resnet18'
@@ -59,7 +74,6 @@ if __name__ == '__main__':
     prediction_type = 'epsilon'
     clip_sample = True
     ema_interval = 1
-    loss_func = torch.nn.functional.mse_loss
 
     # Training
     num_training_epochs = 500
@@ -73,6 +87,14 @@ if __name__ == '__main__':
     print_interval = 374
     do_watch_parameters = False
     record_video = False
+    loss_configs = {
+        'action': {
+            'loss_func': torch.nn.functional.l1_loss,
+            'type': 'diffusion',
+            'weight': 1.0,
+            'shape': (chunk_size, num_actions),
+        },
+    }
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
@@ -94,15 +116,12 @@ if __name__ == '__main__':
         obs_horizon, 
         action_horizon[1] - action_horizon[0],
     )
+    process_configs['low_dim']['max'] = torch.from_numpy(dataset.stats['agent_pos']['max'])
+    process_configs['low_dim']['min'] = torch.from_numpy(dataset.stats['agent_pos']['min'])
+    process_configs['action']['max'] = torch.from_numpy(dataset.stats['action']['max'])
+    process_configs['action']['min'] = torch.from_numpy(dataset.stats['action']['min'])
     preprocessor = PreProcess(
-        desired_rgb_shape=desired_rgb_shape,
-        crop_shape=crop_shape,
-        low_dim_max=torch.from_numpy(dataset.stats['agent_pos']['max']),
-        low_dim_min=torch.from_numpy(dataset.stats['agent_pos']['min']),
-        action_max=torch.from_numpy(dataset.stats['action']['max']),
-        action_min=torch.from_numpy(dataset.stats['action']['min']),
-        enable_6d_rot=False,
-        abs_mode=abs_mode,
+        process_configs=process_configs,
         device=device,
     )
     envs = ParallelPushT(num_envs, max_test_ep_len)
@@ -112,7 +131,6 @@ if __name__ == '__main__':
         preprocessor, 
         obs_horizon,
         action_horizon, 
-        num_actions, 
         save_path,
         device,
     )
@@ -127,11 +145,11 @@ if __name__ == '__main__':
     unet = Chi_UNet1D(
         camera_num=camera_num,
         obs_horizon=obs_horizon,
-        lowdim_obs_dim=len(dataset.stats['agent_pos']['max']),
+        lowdim_obs_dim=lowdim_obs_dim,
         num_actions=num_actions,
         vision_backbone=vision_backbone,
         pretrained_backbone_weights=pretrained_backbone_weights,
-        input_img_shape=(crop_shape, crop_shape),
+        input_img_shape=process_configs['rgb']['crop_shape'],
         use_group_norm=use_group_norm, 
         spatial_softmax_num_keypoints=spatial_softmax_num_keypoints,
         diffusion_step_embed_dim=diffusion_step_embed_dim,
@@ -141,10 +159,8 @@ if __name__ == '__main__':
     ).to(device)
     policy = DiffusionPolicy(
         net=unet,
-        loss_func=loss_func,
+        loss_configs=loss_configs,
         do_compile=do_compile,
-        num_actions=num_actions,
-        chunk_size=chunk_size,
         scheduler_name=diffuser_solver,
         num_train_steps=diffuser_train_steps,
         num_infer_steps=diffuser_infer_steps,
@@ -200,7 +216,7 @@ if __name__ == '__main__':
             epoch=0,
             num_eval_ep=num_eval_ep, 
             max_test_ep_len=max_test_ep_len, 
-            record_video=False)
+            record_video=True)
         ).to(device)
         avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
         acc.print(f'action_horizon {action_horizon}, success rate {avg_reward}')

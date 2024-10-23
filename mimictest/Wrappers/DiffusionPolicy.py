@@ -1,3 +1,4 @@
+import os
 import copy
 import torch
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
@@ -9,10 +10,8 @@ class DiffusionPolicy(BasePolicy):
     def __init__(
             self,
             net,
-            loss_func,
+            loss_configs,
             do_compile,
-            num_actions,
-            chunk_size,
             scheduler_name,
             num_train_steps,
             num_infer_steps,
@@ -21,9 +20,7 @@ class DiffusionPolicy(BasePolicy):
             prediction_type,
             ema_interval,
         ):
-        super().__init__(net, loss_func, do_compile)
-        self.num_actions = num_actions
-        self.chunk_size = chunk_size
+        super().__init__(net, loss_configs, do_compile)
         self.use_ema = True
         self.ema_interval = ema_interval
         self.ema = EMAModel(
@@ -48,46 +45,74 @@ class DiffusionPolicy(BasePolicy):
             )
         self.noise_scheduler.set_timesteps(num_infer_steps)
 
-    def compute_loss(self, rgb, low_dim, actions):
-        # sample noise to add to actions
-        noise = torch.randn(actions.shape, device=rgb.device)
+    def compute_loss(self, batch):
+        device = batch['rgb'].device
+        B = batch['rgb'].shape[0]
 
         # sample a diffusion iteration for each data point
-        B = rgb.shape[0]
-        timesteps = torch.randint(
+        batch['timesteps'] = torch.randint(
             0, self.noise_scheduler.config.num_train_timesteps,
-            (B,), device=rgb.device
+            (B,), device=device,
         ).long()
 
-        # add noise to the clean images according to the noise magnitude at each diffusion iteration
-        # (this is the forward diffusion process)
-        noisy_actions = self.noise_scheduler.add_noise(
-            actions, noise, timesteps)
+        noise = {}
+        batch['noisy_inputs'] = {}
+        for key in self.loss_configs:
+            if self.loss_configs[key]['type'] == 'diffusion':
+                noise[key] = torch.randn((B,)+self.loss_configs[key]['shape'], device=device)
+                batch['noisy_inputs'][key] = self.noise_scheduler.add_noise(
+                    batch[key], noise[key], batch['timesteps'])
 
-        pred, _ = self.net(rgb, low_dim, noisy_actions, timesteps)
+        batch['obs_features'] = None
 
-        if self.prediction_type == 'epsilon':
-            loss = self.loss_func(pred, noise, reduction='none')
-        elif self.prediction_type == 'sample':
-            loss = self.loss_func(pred, actions, reduction='none')
-        elif self.prediction_type == 'v_prediction':
-            target = self.noise_scheduler.get_velocity(actions, noise, timesteps)
-            loss = self.loss_func(pred, target, reduction='none')
-        return loss.sum(dim=(-1,-2)).mean()
+        pred, _ = self.net(batch)
 
-    def infer(self, rgb, low_dim):
-        B = rgb.shape[0]
-        noisy_actions = torch.randn((B, self.chunk_size, self.num_actions), device=rgb.device)
-        ones = torch.ones((B,), device=rgb.device).long()
-        obs_features = None
+        loss = {'total_loss': 0}
+        for key in self.loss_configs:
+            loss_func = self.loss_configs[key]['loss_func']
+            weight = self.loss_configs[key]['weight']
+            if self.loss_configs[key]['type'] == 'diffusion':
+                if self.prediction_type == 'epsilon':
+                    loss[key] = loss_func(pred[key], noise[key])
+                elif self.prediction_type == 'sample':
+                    loss[key] = loss_func(pred[key], batch[key])
+                elif self.prediction_type == 'v_prediction':
+                    target = self.noise_scheduler.get_velocity(batch[key], noise[key], batch['timesteps'])
+                    loss[key] = loss_func(pred[key], target)
+            elif self.loss_configs[key]['type'] == 'simple':
+                loss[key] = loss_func(pred[key], batch[key])
+            loss['total_loss'] += loss[key] * weight
+        return loss
+
+    def infer(self, batch):
+        device = batch['rgb'].device
+        B = batch['rgb'].shape[0]
+
+        batch['noisy_inputs'] = {}
+        for key in self.loss_configs:
+            if self.loss_configs[key]['type'] == 'diffusion':
+                batch['noisy_inputs'][key] = torch.randn((B,)+self.loss_configs[key]['shape'], device=device)
+        ones = torch.ones((B,), device=device).long()
+
+        batch['obs_features'] = None
         for k in self.noise_scheduler.timesteps:
-            pred, obs_features = self.ema_net(rgb, low_dim, noisy_actions, k*ones, obs_features)
-            noisy_actions = self.noise_scheduler.step(
-                model_output=pred,
-                timestep=k,
-                sample=noisy_actions,
-            ).prev_sample
-        return noisy_actions
+            batch['timesteps'] = k*ones
+            out, batch['obs_features'] = self.ema_net(batch)
+            for key in self.loss_configs:
+                if self.loss_configs[key]['type'] == 'diffusion':
+                    batch['noisy_inputs'][key] = self.noise_scheduler.step(
+                        model_output=out[key],
+                        timestep=k,
+                        sample=batch['noisy_inputs'][key],
+                    ).prev_sample
+
+        pred = {}
+        for key in out:
+            if self.loss_configs[key]['type'] == 'diffusion':
+                pred[key] = batch['noisy_inputs'][key]
+            elif self.loss_configs[key]['type'] == 'simple':
+                pred[key] = out[key]
+        return pred
                         
     def save_pretrained(self, acc, path, epoch_id):
         acc.wait_for_everyone()
@@ -105,7 +130,7 @@ class DiffusionPolicy(BasePolicy):
 
     def load_pretrained(self, acc, path, load_epoch_id):
         if os.path.isfile(path / f'policy_{load_epoch_id}.pth'):
-            ckpt = torch.load(path / f'policy_{load_epoch_id}.pth', map_location='cpu')
+            ckpt = torch.load(path / f'policy_{load_epoch_id}.pth', map_location='cpu', weights_only=True)
             if self.do_compile:
                 missing_keys, unexpected_keys = self.net._orig_mod.load_state_dict(ckpt["net"])
                 if self.use_ema:

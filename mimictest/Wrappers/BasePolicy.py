@@ -7,7 +7,7 @@ class BasePolicy():
     def __init__(
             self,
             net,
-            loss_func,
+            loss_configs,
             do_compile,
         ):
         self.do_compile = do_compile
@@ -16,7 +16,7 @@ class BasePolicy():
         else:
             self.net = net 
         self.use_ema = False
-        self.loss_func = loss_func
+        self.loss_configs = loss_configs
 
         print("number of parameters: {:e}".format(
             sum(p.numel() for p in self.net.parameters()))
@@ -41,7 +41,7 @@ class BasePolicy():
 
     def load_pretrained(self, acc, path, load_epoch_id):
         if os.path.isfile(path / f'policy_{load_epoch_id}.pth'):
-            ckpt = torch.load(path / f'policy_{load_epoch_id}.pth', map_location='cpu')
+            ckpt = torch.load(path / f'policy_{load_epoch_id}.pth', map_location='cpu', weights_only=True)
             if self.do_compile:
                 missing_keys, unexpected_keys = self.net._orig_mod.load_state_dict(ckpt["net"], strict=False)
             else:
@@ -68,11 +68,15 @@ class BasePolicy():
                 if do_watch_parameters:
                     wandb.watch(self.net, log="all", log_freq=save_interval)
 
-    def compute_loss(self, rgb, low_dim, actions):
-        pred = self.net(rgb, low_dim)
-        loss = self.loss_func(pred, actions, reduction='none')
-        return loss.sum(dim=(-1,-2)).mean()
+    def compute_loss(self, batch):
+        pred = self.net(batch)
+        loss = {'total_loss': 0}
+        for key in self.loss_configs:
+            loss_func = self.loss_configs[key]['loss_func']
+            weight = self.loss_configs[key]['weight']
+            loss[key] = loss_func(pred[key], batch[key])
+            loss['total_loss'] += loss[key] * weight
+        return loss
 
-    def infer(self, rgb, low_dim):
-        pred_action = self.net(rgb, low_dim)
-        return pred_action
+    def infer(self, batch):
+        return self.net(batch)

@@ -277,24 +277,27 @@ class Chi_UNet1D(nn.Module):
             n_groups=n_groups,
         )
 
-    def forward(self, rgb, low_dim, noisy_actions, timesteps, obs_features=None):
-        if obs_features is None:
+    def forward(self, batch):
+        if batch['obs_features'] is None:
             # encoder vision features
-            B, T, V, C, H, W = rgb.shape
+            B, T, V, C, H, W = batch['rgb'].shape
             image_features = []
             for view_id in range(V):
-                rgb_view = rgb[:, :, view_id].view(B*T, C, H, W)
+                rgb_view = batch['rgb'][:, :, view_id].view(B*T, C, H, W)
                 image_features.append(self.vision_encoders[view_id](rgb_view))
             image_features = torch.cat(image_features, dim=1) # (b*t, d)
             image_features = image_features.view(B, -1) # (b, t*d)
 
             # concatenate vision feature and low-dim obs
-            B, T, D = low_dim.shape
-            low_dim = low_dim.view(B, -1)
+            low_dim = batch['low_dim'].view(B, -1)
             obs_features = torch.cat([image_features, low_dim], dim=-1)
+        else:
+            obs_features = batch['obs_features']
 
         # predict the noise residual
-        noise_pred = self.noise_pred_net(
-            noisy_actions, timesteps, global_cond=obs_features)
-
-        return noise_pred, obs_features
+        pred_noise = {}
+        noisy_input = batch['noisy_inputs']['action']
+        out = self.noise_pred_net(
+            noisy_input, batch['timesteps'], global_cond=obs_features)
+        pred_noise['action'] = out
+        return pred_noise, obs_features

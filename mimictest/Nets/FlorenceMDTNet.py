@@ -16,6 +16,7 @@ class FlorenceMDTNet(nn.Module):
             num_action_query,
             lowdim_obs_dim,
             max_T,
+            ff_dim,
             n_heads, 
             attn_pdrop, 
             resid_pdrop,
@@ -45,12 +46,15 @@ class FlorenceMDTNet(nn.Module):
         self.prompt_embeds = nn.Parameter(self.net.get_input_embeddings()(prompt_token_ids), requires_grad=False) 
 
         token_dim = self.net.language_model.model.decoder.embed_tokens.embedding_dim
+        self.LLM_output_projector = nn.Linear(token_dim, ff_dim)
         self.action_query = nn.Parameter(torch.zeros(1, num_action_query, token_dim))
-        self.action_encoder = nn.Linear(num_actions, token_dim)
-        self.action_decoder = nn.Linear(token_dim, num_actions)
-        self.low_dim_encoder = nn.Linear(lowdim_obs_dim, token_dim)
+        self.action_encoder = nn.Linear(num_actions, ff_dim)
+        self.action_decoder = nn.Sequential(
+            nn.Linear(ff_dim, num_actions),
+        )
+        self.low_dim_encoder = nn.Linear(lowdim_obs_dim, ff_dim)
         self.noise_pred_net = TransformerFiLMDecoder(
-            embed_dim=token_dim, 
+            embed_dim=ff_dim, 
             max_T=max_T,
             n_heads=n_heads, 
             attn_pdrop=attn_pdrop, 
@@ -59,10 +63,10 @@ class FlorenceMDTNet(nn.Module):
             mlp_pdrop=mlp_pdrop,
         ) 
 
-    def forward(self, rgb, low_dim, noisy_actions, timesteps, obs_features=None):
-        if obs_features is None:
-            B, T, V, C, H, W = rgb.shape
-            rgb = rgb.view(B*T*V, C, H, W)
+    def forward(self, batch):
+        if batch['obs_features'] is None:
+            B, T, V, C, H, W = batch['rgb'].shape
+            rgb = batch['rgb'].view(B*T*V, C, H, W)
             rgb_features = self.net._encode_image(rgb)
             B_T_V, N, D = rgb_features.shape
             rgb_features = rgb_features.view(B, T*V*N, D)
@@ -70,22 +74,24 @@ class FlorenceMDTNet(nn.Module):
             text_embeds = self.prompt_embeds.repeat(B, 1, 1) # (b n d)
             inputs_embeds, attention_mask = self.net._merge_input_ids_with_image_features(rgb_features, text_embeds)
 
-            low_dim = self.low_dim_encoder(low_dim) # (b, t, d)
             action_query = self.action_query.repeat(B, 1, 1) # (b, num_action_query, d)
-            num_action_query = action_query.shape[1]
 
-            decoder_inputs_embeds = torch.cat((low_dim, action_query), dim = 1)
             decoder_outputs_embeds = self.net.language_model(
                 inputs_embeds = inputs_embeds,
-                decoder_inputs_embeds = decoder_inputs_embeds,
+                decoder_inputs_embeds = action_query,
                 output_hidden_states = True,
             )['decoder_hidden_states'][-1]
-            obs_features = decoder_outputs_embeds[:, -num_action_query:] # (b, num_action_query, d)
+            obs_features = self.LLM_output_projector(decoder_outputs_embeds)
+            low_dim = self.low_dim_encoder(batch['low_dim']) # (b, t, d)
+            obs_features = torch.cat((obs_features, low_dim), dim=1)
+        else:
+            obs_features = batch['obs_features']
 
         # predict the noise residual
-        noisy_actions = self.action_encoder(noisy_actions)
-        pred = self.noise_pred_net(
-            noisy_actions, timesteps, cond=obs_features)
-        pred = self.action_decoder(pred)
-
-        return pred, obs_features 
+        pred_noise = {}
+        noisy_input = batch['noisy_inputs']['action']
+        noisy_input = self.action_encoder(noisy_input)
+        out = self.noise_pred_net(
+            noisy_input, batch['timesteps'], cond=obs_features)
+        pred_noise['action'] = self.action_decoder(out)
+        return pred_noise, obs_features

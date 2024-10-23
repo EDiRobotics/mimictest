@@ -10,7 +10,7 @@ from mimictest.Utils.PreProcess import PreProcess
 from mimictest.Datasets.RobomimicDataset import CustomMimicDataset, ComputeLimit
 from mimictest.Datasets.DataPrefetcher import DataPrefetcher
 from mimictest.Wrappers.DiffusionPolicy import DiffusionPolicy
-from mimictest.Nets.Chi_UNet1D import Chi_UNet1D
+from mimictest.Nets.Chi_Transformer import Chi_Transformer
 from mimictest.Simulation.ParallelMimic import ParallelMimic
 from mimictest.Train import train
 from mimictest.Evaluation import Evaluation
@@ -30,14 +30,14 @@ if __name__ == '__main__':
     else:
         file_name = 'image.hdf5'
     dataset_path = Path('/root/autodl-tmp/square/ph/') / file_name
-    bs_per_gpu = 640
-    workers_per_gpu = 8
+    bs_per_gpu = 1280
+    workers_per_gpu = 12
+    cache_ratio = 2
     cache_ratio = 2
 
     # Space
     limits = ComputeLimit(dataset_path, abs_mode)
     camera_num = 2
-    num_actions = 7
     num_actions_6d = 10
     lowdim_obs_dim = len(limits['low_dim_max'])
     obs_horizon = 2
@@ -66,10 +66,16 @@ if __name__ == '__main__':
     pretrained_backbone_weights = None
     use_group_norm = True
     spatial_softmax_num_keypoints = 32
-    diffusion_step_embed_dim = 128
-    down_dims = [512, 1024, 2048]
-    kernel_size = 5
-    n_groups = 8
+    max_T = chunk_size
+    n_layer = 8
+    n_cond_layers = 0  # >0: use transformer encoder for cond, otherwise use MLP
+    n_head = 4
+    n_emb = 256
+    p_drop_emb = 0.0
+    p_drop_attn = 0.3
+    causal_attn = True
+    obs_as_cond = True
+    time_as_cond = True # if false, use BERT like encoder only arch, time as input
     do_compile = False
     do_profile = False
 
@@ -80,18 +86,19 @@ if __name__ == '__main__':
     beta_schedule = "squaredcos_cap_v2"
     prediction_type = 'epsilon'
     clip_sample = True
-    ema_interval = 10
+    ema_interval = 1
+    loss_func = torch.nn.functional.mse_loss
 
     # Training
-    num_training_epochs = 1000
-    save_interval = 100 
+    num_training_epochs = 500
+    save_interval = 50
     load_epoch_id = 0
     gradient_accumulation_steps = 1
-    lr_max = 3e-4
+    lr_max = 1e-4
     warmup_steps = 5
-    weight_decay = 1e-4
+    weight_decay = 1e-3
     max_grad_norm = 10
-    print_interval = 44
+    print_interval = 22
     do_watch_parameters = False
     record_video = False
     loss_configs = {
@@ -117,6 +124,7 @@ if __name__ == '__main__':
         # kwargs_handlers=[kwargs],
     )
     device = acc.device
+    dataset = CustomMimicDataset(dataset_path, obs_horizon, chunk_size, start_ratio=0, end_ratio=1)
     preprocessor = PreProcess(
         process_configs=process_configs,
         device=device,
@@ -131,7 +139,6 @@ if __name__ == '__main__':
         save_path,
         device,
     )
-    dataset = CustomMimicDataset(dataset_path, obs_horizon, chunk_size, start_ratio=0, end_ratio=1)
     loader = DataLoader(
         dataset=dataset,
         sampler=None, 
@@ -140,7 +147,7 @@ if __name__ == '__main__':
         num_workers=workers_per_gpu,
         drop_last=True,     
     )
-    unet = Chi_UNet1D(
+    transformer = Chi_Transformer(
         camera_num=camera_num,
         obs_horizon=obs_horizon,
         lowdim_obs_dim=lowdim_obs_dim,
@@ -150,13 +157,19 @@ if __name__ == '__main__':
         input_img_shape=process_configs['rgb']['crop_shape'],
         use_group_norm=use_group_norm, 
         spatial_softmax_num_keypoints=spatial_softmax_num_keypoints,
-        diffusion_step_embed_dim=diffusion_step_embed_dim,
-        down_dims=down_dims,
-        kernel_size=kernel_size,
-        n_groups=n_groups,
+        max_T=max_T,
+        n_layer=n_layer,
+        n_head=n_head,
+        n_emb=n_emb,
+        p_drop_emb=p_drop_emb,
+        p_drop_attn=p_drop_attn,
+        causal_attn=causal_attn,
+        time_as_cond=time_as_cond,
+        obs_as_cond=obs_as_cond,
+        n_cond_layers=n_cond_layers,
     ).to(device)
     policy = DiffusionPolicy(
-        net=unet,
+        net=transformer,
         loss_configs=loss_configs,
         do_compile=do_compile,
         scheduler_name=diffuser_solver,
@@ -167,7 +180,7 @@ if __name__ == '__main__':
         clip_sample=clip_sample,
         prediction_type=prediction_type,
     )
-    policy.load_pretrained(acc, save_path, load_epoch_id)
+    policy.load_pretrained(acc, save_path, load_epoch_id) 
     policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
     optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
     scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)

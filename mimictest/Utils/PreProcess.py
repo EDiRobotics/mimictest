@@ -2,100 +2,96 @@ import torch
 from torchvision.transforms.v2 import Resize, RandomCrop, CenterCrop, ColorJitter
 import mimictest.Utils.RotationConversions as rot
 
-def action_euler_to_6d(action):
-    rot_euler = action[..., 3:6]
+def action_euler_to_6d(rot_euler):
     rot_mat = rot.euler_angles_to_matrix(rot_euler, 'XYZ')
     rot_6d = rot.matrix_to_rotation_6d(rot_mat)
-    new_action = torch.cat((action[..., :3], rot_6d, action[..., -1:]), dim=-1)
-    return new_action
+    return rot_6d
 
-def action_axis_to_6d(action):
-    rot_axis = action[..., 3:6]
+def action_axis_to_6d(rot_axis):
     rot_mat = rot.axis_angle_to_matrix(rot_axis)
     rot_6d = rot.matrix_to_rotation_6d(rot_mat)
-    new_action = torch.cat((action[..., :3], rot_6d, action[..., -1:]), dim=-1)
-    return new_action
+    return rot_6d
 
-def action_6d_to_euler(action):
-    rot_6d = action[..., 3:9]
+def action_6d_to_euler(rot_6d):
     rot_mat = rot.rotation_6d_to_matrix(rot_6d)
     rot_euler = rot.matrix_to_euler_angles(rot_mat, 'XYZ')
-    new_action = torch.cat((action[..., :3], rot_euler, action[..., -1:]), dim=-1)
-    return new_action
+    return rot_euler
 
-def action_6d_to_axis(action):
-    rot_6d = action[..., 3:9]
+def action_6d_to_axis(rot_6d):
     rot_mat = rot.rotation_6d_to_matrix(rot_6d)
     rot_axis = rot.matrix_to_axis_angle(rot_mat)
-    new_action = torch.cat((action[..., :3], rot_axis, action[..., -1:]), dim=-1)
-    return new_action
+    return rot_axis
 
 class PreProcess(): 
     def __init__(
             self,
-            desired_rgb_shape, 
-            crop_shape,
-            low_dim_max,
-            low_dim_min,
-            action_max, 
-            action_min, 
-            enable_6d_rot,
-            abs_mode,
+            process_configs,
             device,
         ):
-        self.train_transforms = torch.nn.Sequential(
-            Resize([desired_rgb_shape, desired_rgb_shape], antialias=True),
-            RandomCrop((crop_shape, crop_shape)),
-        )
-        self.eval_transforms = torch.nn.Sequential(
-            Resize([desired_rgb_shape, desired_rgb_shape], antialias=True),
-            CenterCrop((crop_shape, crop_shape)),
-        )
-        self.action_min = action_min.to(device)
-        self.action_max = action_max.to(device)
-        self.low_dim_min = low_dim_min.to(device)
-        self.low_dim_max = low_dim_max.to(device)
-        self.enable_6d_rot = enable_6d_rot
-        self.abs_mode = abs_mode
+        self.configs = process_configs
+        for key in self.configs:
+            if 'rgb_shape' in self.configs[key]:
+                self.configs[key]['train_transforms'] = torch.nn.Sequential(
+                    Resize(self.configs[key]['rgb_shape'], antialias=True),
+                    RandomCrop(self.configs[key]['crop_shape']),
+                )
+                self.configs[key]['eval_transforms'] = torch.nn.Sequential(
+                    Resize(self.configs[key]['rgb_shape'], antialias=True),
+                    RandomCrop(self.configs[key]['crop_shape']),
+                )
+            self.configs[key]['max'] = self.configs[key]['max'].to(device)
+            self.configs[key]['min'] = self.configs[key]['min'].to(device)
     
-    def rgb_process(self, rgb, train=True):
-        '''
-            Input:
-                rgb:    (..., c, h, w)
-                        dtype = uint8
+    def process(self, batch, train=False):
+        for key in batch:
+            if 'rgb_shape' in self.configs[key]: # image data
+                if train:
+                    batch[key] = self.configs[key]['train_transforms'](batch[key])
+                else:
+                    batch[key] = self.configs[key]['eval_transforms'](batch[key])
+                batch[key] = batch[key].float() / 255.
+            if 'enable_6d_rot' in self.configs[key]:
+                if self.configs[key]['abs_mode']:
+                    rot_axis = batch[key][..., 3:6]
+                    rot_6d = action_axis_to_6d(rot_axis)
+                else:
+                    rot_euler = batch[key][..., 3:6]
+                    rot_6d = action_axis_to_6d(rot_euler)
+                batch[key] = torch.cat((batch[key][..., :3], rot_6d, batch[key][..., 6:]), dim=-1)
+            if "binary" not in self.configs[key]:
+                batch[key] = (batch[key] - self.configs[key]['min']) / (self.configs[key]['max'] - self.configs[key]['min'])
+                batch[key] = batch[key] * 2 - 1 # from (0, 1) to (-1, 1)
+        return batch
 
-            Output:
-                rgb:    (..., c, h, w)
-                        dtype = float32
-        '''
-        if train:
-            rgb = self.train_transforms(rgb)
-        else:
-            rgb = self.eval_transforms(rgb)
-        rgb = rgb.float() / 127.5 - 1 # scale to [-1, 1]
-        return rgb
+    def back_process(self, batch):
+        for key in batch:
+            if "binary" not in self.configs[key]:
+                batch[key] = (batch[key] + 1) * 0.5 # from (-1, 1) to (0, 1)
+                batch[key] = batch[key] * (self.configs[key]['max'] - self.configs[key]['min']) + self.configs[key]['min']
+            if 'rgb_shape' in self.configs[key]: # image data
+                batch[key] = torch.clamp(batch[key], 0, 1)
+                batch[key] = batch[key] * 255.
+            if 'enable_6d_rot' in self.configs[key]:
+                rot_6d = batch[key][..., 3:9]
+                if self.configs[key]['abs_mode']:
+                    rot_axis = action_6d_to_axis(rot_6d)
+                    batch[key] = torch.cat((batch[key][..., :3], rot_axis, batch[key][..., 9:]), dim=-1)
+                else:
+                    rot_euler = action_6d_to_euler(rot_6d)
+                    batch[key] = torch.cat((batch[key][..., :3], rot_euler, batch[key][..., 9:]), dim=-1)
+            if 'binary' in self.configs[key]:
+                batch[key] = torch.nn.Sigmoid()(batch[key])
+                batch[key] = batch[key] > 0.5
+                batch[key] = batch[key].int().float()
+                batch[key] = batch[key] * 2.0 - 1.0
 
-    def low_dim_normalize(self, low_dim):
-        low_dim = (low_dim - self.low_dim_min) / (self.low_dim_max - self.low_dim_min)
-        low_dim = low_dim * 2 - 1
-        return low_dim
-    
-    def action_normalize(self, action):
-        if self.enable_6d_rot:
-            if self.abs_mode:
-                action = action_axis_to_6d(action)
-            else:
-                action = action_euler_to_6d(action)
-        action = (action - self.action_min) / (self.action_max - self.action_min)
-        action = action * 2 - 1
-        return action
-
-    def action_back_normalize(self, action):
-        action = (action + 1) * 0.5
-        action = action * (self.action_max - self.action_min) + self.action_min
-        if self.enable_6d_rot:
-            if self.abs_mode:
-                action = action_6d_to_axis(action)
-            else:
-                action = action_6d_to_euler(action)
-        return action
+        if "arm_action" in batch and "gripper_action" in batch:
+            batch['action'] = torch.cat((
+                batch['arm_action'],
+                batch['gripper_action'],
+            ), dim=-1).cpu().numpy()
+        elif "arm_action" in batch: # no gripper action
+            batch['action'] = batch['arm_action'].cpu().numpy()
+        elif "action" in batch: # no gripper action
+            batch['action'] = batch['action'].cpu().numpy()
+        return batch

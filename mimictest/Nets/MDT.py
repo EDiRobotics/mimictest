@@ -25,7 +25,7 @@ class Attention(nn.Module):
             attn_pdrop: float,
             resid_pdrop: float,
             causal: bool = False,
-            bias=False,
+            bias=True,
         ):
         super().__init__()
         assert n_embd % n_head == 0
@@ -95,23 +95,23 @@ class Block(nn.Module):
             mlp_pdrop: float,
             causal: bool,
             use_cross_attention: bool = False,
-            bias: bool = False, # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+            bias: bool = True, # True: bias in Linears
         ):
         super().__init__()
-        self.ln_1 = LayerNorm(n_embd, bias=bias)
+        self.norm_1 = LayerNorm(n_embd, bias)
         self.attn = Attention(n_embd, n_heads, attn_pdrop, resid_pdrop, causal, bias)
         self.use_cross_attention = use_cross_attention
         if self.use_cross_attention:
             self.cross_att = Attention(n_embd, n_heads, attn_pdrop, resid_pdrop, causal, bias)
-            self.ln3 = nn.LayerNorm(n_embd)
-        self.ln_2 = LayerNorm(n_embd, bias=bias)
+            self.norm_3 = LayerNorm(n_embd, bias)
+        self.norm_2 = LayerNorm(n_embd, bias)
         self.mlp = MLP(n_embd, bias, mlp_pdrop)
 
     def forward(self, x, context=None, custom_attn_mask=None):
-        x = x + self.attn(self.ln_1(x), custom_attn_mask=custom_attn_mask)
+        x = x + self.attn(self.norm_1(x), custom_attn_mask=custom_attn_mask)
         if self.use_cross_attention and context is not None:
-            x = x + self.cross_att(self.ln3(x), context, custom_attn_mask=custom_attn_mask)
-        x = x + self.mlp(self.ln_2(x))
+            x = x + self.cross_att(self.norm_3(x), context, custom_attn_mask=custom_attn_mask)
+        x = x + self.mlp(self.norm_2(x))
         return x
 
 class AdaLNZero(nn.Module):
@@ -156,16 +156,16 @@ class ConditionedBlock(Block):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_zero(c)
         
         # Attention with modulation
-        x_attn = self.ln_1(x)
+        x_attn = self.norm_1(x)
         x_attn = modulate(x_attn, shift_msa, scale_msa)
         x = x + gate_msa * self.attn(x_attn, custom_attn_mask=custom_attn_mask)
         
         # Cross attention if used
         if self.use_cross_attention and context is not None:
-            x = x + self.cross_att(self.ln3(x), context, custom_attn_mask=custom_attn_mask)
+            x = x + self.cross_att(self.norm_3(x), context, custom_attn_mask=custom_attn_mask)
         
         # MLP with modulation
-        x_mlp = self.ln_2(x)
+        x_mlp = self.norm_2(x)
         x_mlp = modulate(x_mlp, shift_mlp, scale_mlp)
         x = x + gate_mlp * self.mlp(x_mlp)
         
@@ -215,12 +215,14 @@ class TransformerFiLMDecoder(nn.Module):
         )
         self.time_emb = SinusoidalPosEmb(embed_dim)
         self.pos_emb = nn.Parameter(torch.randn(1, max_T, embed_dim))
-        self.ln = LayerNorm(embed_dim, bias)
+        self.norm = LayerNorm(embed_dim, bias)
 
     def forward(self, x, c, cond=None, custom_attn_mask=None):
         c = self.time_emb(c).unsqueeze(1)
+        B, T, D = x.shape
+        x = torch.cat((cond, x), dim=1)
         x += self.pos_emb[:, :x.shape[1]]
         for layer in self.blocks:
-            x = layer(x, c, cond, custom_attn_mask=custom_attn_mask)
-        x = self.ln(x)
+            x = layer(x, c, custom_attn_mask=custom_attn_mask)
+        x = self.norm(x[:, -T:])
         return x

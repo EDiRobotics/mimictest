@@ -7,23 +7,20 @@ from moviepy.editor import ImageSequenceClip
 from tqdm import tqdm
 
 class Evaluation():
-    def __init__(self, envs, num_envs, preprcs, obs_horizon, action_horizon, num_actions, save_path, device):
+    def __init__(self, envs, num_envs, preprcs, obs_horizon, action_horizon, save_path, device):
         self.envs = envs
         self.num_envs = num_envs
         self.preprcs = preprcs
         self.device = device
         self.obs_horizon = obs_horizon
         self.action_horizon = action_horizon
-        self.num_actions = num_actions
         self.save_path = save_path
         return None
 
     def fill_buffer(self, obs):
         rgb = torch.from_numpy(obs['rgb'])
         rgb = rearrange(rgb, 'b v h w c -> b v c h w').contiguous()
-        rgb = self.preprcs.rgb_process(rgb, train=False).to(self.device)
         low_dim = torch.from_numpy(obs['low_dim']).float()
-        low_dim = self.preprcs.low_dim_normalize(low_dim.to(self.device))
         if len(self.rgb_buffer) == 0: # Fill the buffer 
             for i in range(self.obs_horizon):
                 self.rgb_buffer.append(rgb)
@@ -35,6 +32,7 @@ class Evaluation():
             self.low_dim_buffer.append(low_dim)
         else:
             raise ValueError(f"Evaluation.py: buffer len {len(self.rgb_buffer)}")
+
     def evaluate_on_env(self, acc, policy, epoch, num_eval_ep, max_test_ep_len, record_video=False):
         if policy.use_ema:
             policy.ema_net.eval()
@@ -57,8 +55,13 @@ class Evaluation():
                 t = 0
                 progress_bar = tqdm(total=max_test_ep_len, desc=f"run episode {ep+1} of {num_eval_ep}", disable=not acc.is_main_process)
                 while t < max_test_ep_len:
-                    pred_actions = policy.infer(torch.stack(self.rgb_buffer, dim=1), torch.stack(self.low_dim_buffer, dim=1))
-                    pred_actions = self.preprcs.action_back_normalize(pred_actions).cpu().numpy()
+                    batch = {
+                        'rgb': torch.stack(self.rgb_buffer, dim=1).to(self.device),
+                        'low_dim': torch.stack(self.low_dim_buffer, dim=1).to(self.device),
+                    }
+                    batch = self.preprcs.process(batch, train=False)
+                    pred = policy.infer(batch)
+                    pred_actions = self.preprcs.back_process(pred)['action']
                     for action_id in range(self.action_horizon[0], self.action_horizon[1]):
                         obs, rw, done, info = self.envs.step(pred_actions[:, action_id])
                         self.fill_buffer(obs)

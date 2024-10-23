@@ -64,10 +64,12 @@ def train(
                 avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
 
         batch_metric = {
-            'loss': 0,
+            'total_loss': 0,
             'grad_norm_before_clip': 0,
             'dataload_time': 0,
         } 
+        for key in policy.loss_configs:
+            batch_metric[key] = 0
         avg_metric = copy.deepcopy(batch_metric) # average over batches
         clock = time()
         batch_idx = 0
@@ -76,17 +78,16 @@ def train(
             with acc.accumulate(policy.net):
                 policy.net.train()
                 optimizer.zero_grad()
-                rgbs = preprocessor.rgb_process(batch['rgbs'], train=True)
-                low_dims = preprocessor.low_dim_normalize(batch['low_dims'])
-                actions = preprocessor.action_normalize(batch['actions'])
-                loss = policy.compute_loss(rgbs, low_dims, actions)
-                acc.backward(loss)
+                batch = preprocessor.process(batch, train=True)
+                loss = policy.compute_loss(batch)
+                acc.backward(loss['total_loss'])
                 if acc.sync_gradients:
                     batch_metric['grad_norm_before_clip'] = acc.clip_grad_norm_(policy.parameters(), max_grad_norm)
                 optimizer.step(optimizer)
                 if policy.use_ema and batch_idx % policy.ema_interval == 0:
                     policy.update_ema()
-                batch_metric['loss'] = loss.detach()
+                for key in loss:
+                    batch_metric[key] = loss[key].detach()
                 for key in batch_metric:
                     avg_metric[key] += batch_metric[key] / print_interval
 

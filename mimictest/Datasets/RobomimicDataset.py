@@ -33,10 +33,12 @@ def ComputeLimit(dataset_path, abs_mode):
     for i in range(len(dataset)):
         low_dim = np.concatenate((dataset[i]['obs']['robot0_eef_pos'], dataset[i]['obs']['robot0_eef_quat'], dataset[i]['obs']['robot0_gripper_qpos']), axis=-1)[0].astype(np.float32)
         low_dims.append(torch.from_numpy(low_dim))
+        action = torch.from_numpy(dataset[i]['actions'][0])
+        rot = action[3:6]
         if abs_mode:
-            action = action_axis_to_6d(torch.from_numpy(dataset[i]['actions'][0]))
+            action = torch.cat((action[:3], action_axis_to_6d(rot), action[6:]), dim=-1)
         else:
-            action = action_euler_to_6d(torch.from_numpy(dataset[i]['actions'][0]))
+            action = torch.cat((action[:3], action_euler_to_6d(rot), action[6:]), dim=-1)
         actions.append(action)
     low_dims = torch.stack(low_dims)
     actions = torch.stack(actions)
@@ -104,9 +106,9 @@ class CustomMimicDataset(Dataset):
         rgbs = torch.from_numpy(np.stack((batch['obs']['agentview_image'], batch['obs']['robot0_eye_in_hand_image']), axis=1))
         low_dims = np.concatenate((batch['obs']['robot0_eef_pos'], batch['obs']['robot0_eef_quat'], batch['obs']['robot0_gripper_qpos']), axis=-1).astype(np.float32)
         return {
-            'rgbs': rearrange(rgbs, 't v h w c -> t v c h w').contiguous(),
-            'low_dims': low_dims,
-            'actions': action_batch['actions'],
+            'rgb': rearrange(rgbs, 't v h w c -> t v c h w').contiguous(),
+            'low_dim': low_dims,
+            'action': action_batch['actions'],
         }
 
     def __len__(self):

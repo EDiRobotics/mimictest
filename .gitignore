@@ -2,3 +2,4 @@ __pycache__/
 wandb/
 Save/
 *.egg-info/
+*.pth

@@ -29,26 +29,43 @@ if __name__ == '__main__':
         file_name = 'image_abs.hdf5'
     else:
         file_name = 'image.hdf5'
-    dataset_path = Path('/root/dataDisk/square/ph/') / file_name
-    bs_per_gpu = 128
-    desired_rgb_shape = 84
-    crop_shape = 76
+    dataset_path = Path('/root/autodl-tmp/square/ph/') / file_name
+    bs_per_gpu = 64
     workers_per_gpu = 8
     cache_ratio = 2
 
     # Space
-    num_actions = 7
+    limits = ComputeLimit(dataset_path, abs_mode)
     num_actions_6d = 10
+    lowdim_obs_dim = len(limits['low_dim_max'])
     obs_horizon = 2
     chunk_size = 16
-    limits = ComputeLimit(dataset_path, abs_mode)
+    process_configs = {
+        'rgb': {
+            'rgb_shape': (84, 84),
+            'crop_shape': (76, 76),
+            'max': torch.tensor(1.0),
+            'min': torch.tensor(0.0),
+        },
+        'low_dim': {
+            'max': limits['low_dim_max'], 
+            'min': limits['low_dim_min'],
+        },
+        'action': {
+            'max': limits['action_max'],
+            'min': limits['action_min'],
+            'enable_6d_rot': True,
+            'abs_mode': True,
+        },
+    }
 
     # Network
     model_path = Path("microsoft/Florence-2-base")
     freeze_vision_tower = True
     freeze_florence = False
-    num_action_query = 10
-    max_T = chunk_size
+    num_action_query = 64
+    max_T = 128
+    ff_dim = 128
     n_heads = 8
     attn_pdrop = 0.3
     resid_pdrop = 0.1
@@ -65,7 +82,6 @@ if __name__ == '__main__':
     prediction_type = 'epsilon'
     clip_sample = True
     ema_interval = 10
-    loss_func = torch.nn.functional.mse_loss
 
     # Training
     num_training_epochs = 1000
@@ -76,9 +92,17 @@ if __name__ == '__main__':
     warmup_steps = 5
     weight_decay = 1e-4
     max_grad_norm = 10
-    print_interval = 19
+    print_interval = 456
     do_watch_parameters = False
     record_video = False
+    loss_configs = {
+        'action': {
+            'loss_func': torch.nn.functional.mse_loss,
+            'type': 'diffusion',
+            'weight': 1.0,
+            'shape': (chunk_size, num_actions_6d),
+        },
+    }
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
@@ -95,14 +119,7 @@ if __name__ == '__main__':
     )
     device = acc.device
     preprocessor = PreProcess(
-        desired_rgb_shape=desired_rgb_shape,
-        crop_shape=crop_shape,
-        low_dim_max=limits['low_dim_max'],
-        low_dim_min=limits['low_dim_min'],
-        action_max=limits['action_max'],
-        action_min=limits['action_min'],
-        enable_6d_rot=True,
-        abs_mode=abs_mode,
+        process_configs=process_configs,
         device=device,
     )
     envs = ParallelMimic(dataset_path, num_envs, abs_mode)
@@ -112,7 +129,6 @@ if __name__ == '__main__':
         preprocessor, 
         obs_horizon,
         action_horizon, 
-        num_actions, 
         save_path,
         device,
     )
@@ -133,6 +149,7 @@ if __name__ == '__main__':
         num_action_query=num_action_query,
         lowdim_obs_dim=len(limits['low_dim_max']),
         max_T=max_T,
+        ff_dim=ff_dim,
         n_heads=n_heads,
         attn_pdrop=attn_pdrop,
         resid_pdrop=resid_pdrop,
@@ -141,10 +158,8 @@ if __name__ == '__main__':
     ).to(device)
     policy = DiffusionPolicy(
         net=net,
-        loss_func=loss_func,
+        loss_configs=loss_configs,
         do_compile=do_compile,
-        num_actions=num_actions_6d,
-        chunk_size=chunk_size,
         scheduler_name=diffuser_solver,
         num_train_steps=diffuser_train_steps,
         num_infer_steps=diffuser_infer_steps,

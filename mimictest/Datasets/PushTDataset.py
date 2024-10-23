@@ -144,10 +144,8 @@ class PushTImageDataset(torch.utils.data.Dataset):
         )
 
         # discard unused observations
-        nsample['rgbs'] = nsample['image'][:self.obs_horizon, np.newaxis, :].copy()
-        nsample['low_dims'] = nsample['agent_pos'][:self.obs_horizon, :].copy()
-        nsample['actions'] = nsample['action'].copy()
+        nsample['rgb'] = nsample['image'][:self.obs_horizon, np.newaxis, :].copy()
+        nsample['low_dim'] = nsample['agent_pos'][:self.obs_horizon, :].copy()
         del nsample['image']
         del nsample['agent_pos']
-        del nsample['action']
         return nsample
