@@ -9,7 +9,7 @@ class RT1(nn.Module):
             self,
             efficientnet_version,
             FiLM_cond_channel,
-            lowdim_obs_num,
+            lowdim_obs_dim,
             num_actions,
             chunk_size,
             depth,
@@ -36,7 +36,7 @@ class RT1(nn.Module):
             num_output_tokens = token_learner_num_output_tokens,
         )
         self.vision_after_proj = nn.Linear(vision_token_dim, ff_dim)
-        self.lowdim_encoder = nn.Linear(lowdim_obs_num, ff_dim)
+        self.lowdim_encoder = nn.Linear(lowdim_obs_dim, ff_dim)
         self.lan_encoder = nn.Linear(FiLM_cond_channel, ff_dim)
         self.action_query = nn.Parameter(torch.zeros(chunk_size, ff_dim)) 
         self.BERT_dec = Transformer(
@@ -53,12 +53,12 @@ class RT1(nn.Module):
         self.num_actions = num_actions
         self.dummy_text_embeds = nn.Parameter(torch.zeros(1, FiLM_cond_channel), requires_grad=False)
 
-    def forward(self, rgbs, low_dim, text_embeds=None):
-        if text_embeds == None:
+    def forward(self, batch):
+        if "text_embeds" not in batch:
             text_embeds = self.dummy_text_embeds
 
-        B, T, V, C, H, W = rgbs.shape
-        rgbs = rgbs.view(B*T*V, C, H, W)
+        B, T, V, C, H, W = batch['rgb'].shape
+        rgbs = batch['rgb'].view(B*T*V, C, H, W)
         rgb_tokens = self.vision_encoder(rgbs, text_embeds.expand(B*T*V, -1)) 
         rgb_tokens = self.vision_pre_proj(rgb_tokens)
         rgb_tokens = self.token_learner(rgb_tokens) 
@@ -66,7 +66,7 @@ class RT1(nn.Module):
         rgb_tokens = rgb_tokens.reshape(B, T, V, C, N).transpose(3, 4).reshape(B, T*V*N, C)
         rgb_tokens = self.vision_after_proj(rgb_tokens)
 
-        low_dim_token = self.lowdim_encoder(low_dim) # (b t c)
+        low_dim_token = self.lowdim_encoder(batch['low_dim']) # (b t c)
 
         lan_token = self.lan_encoder(text_embeds.expand(B, -1))
         B, C = lan_token.shape
@@ -78,4 +78,5 @@ class RT1(nn.Module):
         input_tokens = torch.cat((rgb_tokens, low_dim_token, lan_token, action_query), dim=1)
         output_tokens = self.BERT_dec(input_tokens)
         actions = self.to_actions(output_tokens[:, -self.chunk_size:])
-        return actions
+        pred = {"action": actions}
+        return pred

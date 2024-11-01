@@ -70,6 +70,15 @@ if __name__ == '__main__':
     parser.add_argument('--num_envs', type=int, help='number of environments you want to run')
     parser.add_argument('--abs_mode', action='store_true', help='speficy it if you use absolute action space')
     cfg = parser.parse_args()
+    env_meta = FileUtils.get_env_metadata_from_dataset(cfg.dataset_path)
+    env = EnvUtils.create_env_from_metadata(
+        env_meta=env_meta,
+        env_name=env_meta["env_name"],
+        render=False,
+        render_offscreen=True,
+        use_image_obs=True,
+    ).env
+    import pdb; pdb.set_trace()
     envs = ParallelMimic(cfg.dataset_path, cfg.num_envs, cfg.abs_mode)
     obs = envs.reset()
     actions = np.random.randn(cfg.num_envs, 7)

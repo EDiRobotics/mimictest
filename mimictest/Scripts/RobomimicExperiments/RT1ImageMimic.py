@@ -30,19 +30,35 @@ if __name__ == '__main__':
         file_name = 'image_abs.hdf5'
     else:
         file_name = 'image.hdf5'
-    dataset_path = Path('/root/dataDisk/square/ph/') / file_name
+    dataset_path = Path('/root/autodl-tmp/square/ph/') / file_name
     bs_per_gpu = 432
-    desired_rgb_shape = 84
-    crop_shape = 76
     workers_per_gpu = 8
     cache_ratio = 2
 
     # Space
-    num_actions = 7
+    limits = ComputeLimit(dataset_path, abs_mode)
     num_actions_6d = 10
+    lowdim_obs_dim = len(limits['low_dim_max'])
     obs_horizon = 2
     chunk_size = 16
-    limits = ComputeLimit(dataset_path, abs_mode)
+    process_configs = {
+        'rgb': {
+            'rgb_shape': (84, 84),
+            'crop_shape': (76, 76),
+            'max': torch.tensor(1.0),
+            'min': torch.tensor(0.0),
+        },
+        'low_dim': {
+            'max': limits['low_dim_max'], 
+            'min': limits['low_dim_min'],
+        },
+        'action': {
+            'max': limits['action_max'],
+            'min': limits['action_min'],
+            'enable_6d_rot': True,
+            'abs_mode': True,
+        },
+    }
 
     # Network
     # select from https://pytorch.org/vision/main/models/efficientnetv2.html
@@ -66,20 +82,27 @@ if __name__ == '__main__':
     save_interval = 50 
     load_epoch_id = 0
     gradient_accumulation_steps = 1
-    lr_max = 2e-5
+    lr_max = 1e-4
     warmup_steps = 5
     weight_decay = 1e-4
     max_grad_norm = 10
     print_interval = 60
     do_watch_parameters = False
     record_video = False
+    loss_configs = {
+        'action': {
+            'loss_func': torch.nn.functional.l1_loss,
+            'type': 'simple',
+            'weight': 1.0,
+            'shape': (chunk_size, num_actions_6d),
+        },
+    }
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
     num_eval_ep = 6
     action_horizon = [0, 1]
     max_test_ep_len = 400
-    smooth_factor = 0.01
 
     # Preparation
     kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
@@ -90,14 +113,7 @@ if __name__ == '__main__':
     )
     device = acc.device
     preprocessor = PreProcess(
-        desired_rgb_shape=desired_rgb_shape,
-        crop_shape=crop_shape,
-        low_dim_max=limits['low_dim_max'],
-        low_dim_min=limits['low_dim_min'],
-        action_max=limits['action_max'],
-        action_min=limits['action_min'],
-        enable_6d_rot=True,
-        abs_mode=abs_mode,
+        process_configs=process_configs,
         device=device,
     )
     envs = ParallelMimic(dataset_path, num_envs, abs_mode)
@@ -107,7 +123,6 @@ if __name__ == '__main__':
         preprocessor, 
         obs_horizon,
         action_horizon, 
-        num_actions, 
         save_path,
         device,
     )
@@ -123,7 +138,7 @@ if __name__ == '__main__':
     net = RT1(
         efficientnet_version=efficientnet_version,
         FiLM_cond_channel=FiLM_cond_channel,
-        lowdim_obs_num=len(limits['low_dim_max']),
+        lowdim_obs_dim=len(limits['low_dim_max']),
         num_actions=num_actions_6d,
         chunk_size=chunk_size,
         depth=depth,
@@ -138,7 +153,7 @@ if __name__ == '__main__':
     ).to(device)
     policy = BasePolicy(
         net=net,
-        loss_func=torch.nn.functional.l1_loss,
+        loss_configs=loss_configs,
         do_compile=do_compile,
     )
     policy.load_pretrained(acc, save_path, load_epoch_id)

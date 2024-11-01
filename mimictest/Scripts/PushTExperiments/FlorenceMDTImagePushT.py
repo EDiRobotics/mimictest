@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, random_split
-from transformers import get_constant_schedule_with_warmup
+from transformers import get_cosine_schedule_with_warmup
 from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
 from mimictest.Utils.AccelerateFix import AsyncStep
@@ -27,7 +27,7 @@ if __name__ == '__main__':
     abs_mode = True # relative EE action space or absolute EE action space
     file_name = 'pusht_cchi_v7_replay.zarr'
     dataset_path = Path('/root/autodl-tmp/pusht/') / file_name
-    bs_per_gpu = 88
+    bs_per_gpu = 64
     workers_per_gpu = 12
     cache_ratio = 2
 
@@ -78,15 +78,15 @@ if __name__ == '__main__':
     ema_interval = 10
 
     # Training
-    num_training_epochs = 500
+    num_training_epochs = 400
     save_interval = 50
-    load_epoch_id = 350
+    load_epoch_id = 0
     gradient_accumulation_steps = 1
     lr_max = 1e-4
     warmup_steps = 5
     weight_decay = 1e-4
     max_grad_norm = 10
-    print_interval = 267
+    print_interval = 360
     do_watch_parameters = False
     record_video = False
     loss_configs = {
@@ -141,7 +141,7 @@ if __name__ == '__main__':
         sampler=None, 
         batch_size=bs_per_gpu,
         shuffle=True,
-        # num_workers=workers_per_gpu,
+        num_workers=workers_per_gpu,
         drop_last=True,     
     )
     net = FlorenceMDTNet(
@@ -174,9 +174,10 @@ if __name__ == '__main__':
     policy.load_pretrained(acc, save_path, load_epoch_id)
     policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
     optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=False)
-    scheduler = get_constant_schedule_with_warmup(
+    scheduler = get_cosine_schedule_with_warmup(
         optimizer, 
         num_warmup_steps=warmup_steps, 
+        num_training_steps=num_training_epochs,
     )
     policy.net, policy.ema_net, optimizer, loader = acc.prepare(
         policy.net, 
