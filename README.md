@@ -336,3 +336,7 @@ You can simply `pip -U numba` or this [link](https://stackoverflow.com/questions
 apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
 ```
 Or check this [link](https://stackoverflow.com/questions/55313610/importerror-libgl-so-1-cannot-open-shared-object-file-no-such-file-or-directo).
+
+8. `failed to EGL with glad`
+
+The core problem seems to be lack of `libEGL.so.1`. You may try `apt-get update && apt-get install libegl1`. If you find other packages not installed during installing `libegl1`, please install them.
