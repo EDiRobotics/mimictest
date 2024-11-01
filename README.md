@@ -7,7 +7,7 @@
 
 </div>
 
-A simple testbed for robotics manipulation policies based on [robomimic](https://robomimic.github.io/). All policies are rewritten in a simple way. We may further expand it to the [libero](https://github.com/Lifelong-Robot-Learning/LIBERO) benchmark, which is also based on [robosuite](https://github.com/ARISE-Initiative/robosuite) simulator.
+A simple testbed for robotics manipulation policies based on [robomimic](https://robomimic.github.io/). All policies are rewritten in a simple way. We may further expand it to the [robocasa](https://github.com/robocasa/robocasa) benchmark, which is also based on [robosuite](https://github.com/ARISE-Initiative/robosuite) simulator.
 
 We also have policies trained and tested on the [CALVIN](https://github.com/mees/calvin) benchmark, e.g., [GR1-Training](https://github.com/EDiRobotics/GR1-Training) which is the current SOTA on the hardest ABC->D task of CALVIN.
 
@@ -25,6 +25,8 @@ We also have policies trained and tested on the [CALVIN](https://github.com/mees
 **Please remember we build systems for you ヾ(^▽^*)).** Feel free to ask [@StarCycle](https://github.com/StarCycle) if you have any question!
 
 ## News
+**[2024.11.1]** Update the performance of PushT environment.
+
 **[2024.8.9]** Several updates below. And we are merging the base Florence policy to HuggingFace LeRobot.
 - Add Florence policy with DiT diffusion action head from [MDT](https://github.com/intuitive-robots/mdt_policy) developed by [intuitive robot lab](https://github.com/intuitive-robots) at KIT. 
 - Switch from tensorboard to wandb.
@@ -167,51 +169,12 @@ Square task with professional demos:
 | Diffusion Policy (UNet) | 88.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/unet_square/unet.pth) | 329M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/unet_square) |
 | Diffusion Policy (Transformer) | 90.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/DiffusionTransformer_square/DiffusionTransformer.pth) | 31.5M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/DiffusionTransformer_square) |
 | Florence (linear head) | 88.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_square/florence.pth) | 270.8M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_square) |
-| Florence (diffusion head - Cheng Chi) | 92.7% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_octo_square/florence_octo.pth) | 279.9M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_octo_square) |
 | Florence (diffusion head - MDT DiT) | 93.75% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_mdt_square/florence_mdt_square.pth) | 322.79M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/tree/main/florence_mdt_square) |
 
 </div>
 
 *The success rate is measured with an average of 3 latest checkpoints. Each checkpoint is evaluated with 96 rollouts.
 *For diffusion models, we save both the trained model and the exponential moving average (EMA) of the trained model in a checkpoint
-
-<details>
-  <summary> Failure analysis </summary>
-
-- RT-1:
-	- Failure to grasp an object after picking it up and the object falls: 1
- 	- Pause before picking the object: 6
-	- Pause before inserting object into the target: 2
- 	- It thought the gripper picked up the object, but actually not: 3
-  	- When inserting the object into target, the object gets stuck halfway through, and the policy doesn't know how to fix it: 1
-- Diffusion Policy (UNet):
-  	- Failure to grasp an object after picking it up and the object falls: 2
-	- Pause before picking the object: 2
-   	- It thought the gripper picked up the object, but actually not: 1
-	- When inserting the object into target, the object gets stuck halfway through, and the policy doesn't know how to fix it: 3
- 	- It successfylly inserts the object into target but suddenly lifts and throws the object away: 1
-- Diffusion Policy (Transformer):
-	- Pause before picking the object: 1 (In the third-person view, objects are obscured by the gripper)
-  	- It thought the gripper picked up the object, but actually not: 1
-	- Pause before inserting object into the target: 2
- - Florence (linear head):
-   	- Failure to grasp an object after picking it up and the object falls: 1
-	- Pause before picking the object: 6
-	- Pause before inserting object into the target: 5
-	- It thought the gripper picked up the object, but actually not: 1
- 	- It successfylly inserts the object into target but suddenly lifts and throws the object away: 1
-  - Florence (Cheng Chi's diffusion transformer head):
-	- Failure to grasp an object after picking it up and the object falls: 6
-	- Pause before picking the object: 4
-	- Pause before inserting object into the target: 2
-	- When inserting the object into target, the object gets stuck halfway through, and the policy doesn't know how to fix it: 2
-   	- When inserting the object into target, the object falls halfway through, and the policy doesn't know how to fix it: 1
-- Florence (MDT DiT head):
-	- Pause before picking the object: 4
-	- When inserting the object into target, the object gets stuck halfway through, and the policy doesn't know how to fix it: 1
-	- 
-
-</details>
 
 ## Installation
 
@@ -252,6 +215,19 @@ If you only want to download a subset of the data, e.g., the square task with im
 ```
 ./hfd.sh EDiRobotics/mimictest_data --dataset --tool aria2c -x 9 --include robomimic_image/square.zip
 ```
+
+</details>
+
+<details>
+  <summary> For the PushT experiment. </summary>
+
+The recommended python version is 3.19. You can install the environment via 
+
+```
+pip install gym-pusht
+```
+
+Then you can download the PushT dataset from the [official link](https://diffusion-policy.cs.columbia.edu/data/training/).
 
 </details>
 
