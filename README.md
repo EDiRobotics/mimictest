@@ -188,7 +188,9 @@ We implement the following algorithms:
 | Florence (diffusion head - MDT DiT) | 64% | 322.79M |
 
 </div>
-*Each checkpoint is evaluated with 96 rollouts.
+
+*Each checkpoint is evaluated with 96 rollouts. 
+
 *A success in the PushT environment requires a final IoU > 95% (which is difficult to locate under low resolution). If you raise the resolution or reduce the threshold, the succes rate will be much higher.
 
 ## Installation
