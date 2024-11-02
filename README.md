@@ -157,19 +157,32 @@ We implement the following algorithms:
 
 ## Performance on Example Task
 
-Square task with professional demos:
+**PushT task:**
+
+<div align=center><img src ="https://github.com/user-attachments/assets/21b477a1-3f0d-440a-9a56-1224cc0136fb"/>
+
+| Policy | Success Rate | Checkpoint | Model Size |
+|--|--|--|--|
+| RT-1 | 52% | [HuggingFace]() | 23.8M |
+| Diffusion Policy (UNet) | 64.5% | [HuggingFace]() | 76M |
+| Florence (linear head) | 53% | [HuggingFace]() | 270.8M |
+| Florence (diffusion head - MDT DiT) | 64% | [HuggingFace]() | 322.79M |
+
+</div>
+
+**Square task with professional demos:**
 
 <div align=center><img src ="README_md_files/ee649200-4e85-11ef-b431-ef7e324e13ae.jpeg?v=1"/></div>
 
 <div align="center">
 	
-| Policy | Success Rate | Checkpoint | Model Size | Failure Cases |
-|--|--|--|--|--|
-| RT-1 | 62% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/RT1_square/RT1.pth) | 23.8M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/tree/main/RT1_square) | 
-| Diffusion Policy (UNet) | 88.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/unet_square/unet.pth) | 329M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/unet_square) |
-| Diffusion Policy (Transformer) | 90.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/DiffusionTransformer_square/DiffusionTransformer.pth) | 31.5M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/DiffusionTransformer_square) |
-| Florence (linear head) | 88.5% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_square/florence.pth) | 270.8M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_square) |
-| Florence (diffusion head - MDT DiT) | 93.75% | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/blob/main/florence_mdt_square/florence_mdt_square.pth) | 322.79M | [HuggingFace](https://huggingface.co/EDiRobotics/Mimictest_logs/tree/main/florence_mdt_square) |
+| Policy | Success Rate | Model Size |
+|--|--|--|
+| RT-1 | 62% | 23.8M | 
+| Diffusion Policy (UNet) | 88.5% | 329M |
+| Diffusion Policy (Transformer) | 90.5% | 31.5M |
+| Florence (linear head) | 88.5% | 270.8M | 
+| Florence (diffusion head - MDT DiT) | 93.75% | 322.79M |
 
 </div>
 
