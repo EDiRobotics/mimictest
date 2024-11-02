@@ -161,12 +161,12 @@ We implement the following algorithms:
 
 <div align=center><img src ="https://github.com/user-attachments/assets/21b477a1-3f0d-440a-9a56-1224cc0136fb"/>
 
-| Policy | Success Rate | Checkpoint | Model Size |
-|--|--|--|--|
-| RT-1 | 52% | [HuggingFace]() | 23.8M |
-| Diffusion Policy (UNet) | 64.5% | [HuggingFace]() | 76M |
-| Florence (linear head) | 53% | [HuggingFace]() | 270.8M |
-| Florence (diffusion head - MDT DiT) | 64% | [HuggingFace]() | 322.79M |
+| Policy | Success Rate | Model Size |
+|--|--|--|
+| RT-1 | 52% | 23.8M |
+| Diffusion Policy (UNet) | 64.5% | 76M |
+| Florence (linear head) | 53% | 270.8M |
+| Florence (diffusion head - MDT DiT) | 64% | 322.79M |
 
 </div>
 
