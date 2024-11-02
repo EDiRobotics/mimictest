@@ -157,19 +157,6 @@ We implement the following algorithms:
 
 ## Performance on Example Task
 
-**PushT task:**
-
-<div align=center><img src ="https://github.com/user-attachments/assets/21b477a1-3f0d-440a-9a56-1224cc0136fb"/>
-
-| Policy | Success Rate | Model Size |
-|--|--|--|
-| RT-1 | 52% | 23.8M |
-| Diffusion Policy (UNet) | 64.5% | 76M |
-| Florence (linear head) | 53% | 270.8M |
-| Florence (diffusion head - MDT DiT) | 64% | 322.79M |
-
-</div>
-
 **Square task with professional demos:**
 
 <div align=center><img src ="README_md_files/ee649200-4e85-11ef-b431-ef7e324e13ae.jpeg?v=1"/></div>
@@ -188,6 +175,21 @@ We implement the following algorithms:
 
 *The success rate is measured with an average of 3 latest checkpoints. Each checkpoint is evaluated with 96 rollouts.
 *For diffusion models, we save both the trained model and the exponential moving average (EMA) of the trained model in a checkpoint
+
+**PushT task:**
+
+<div align=center><img src ="https://github.com/user-attachments/assets/21b477a1-3f0d-440a-9a56-1224cc0136fb"/>
+
+| Policy | Success Rate | Model Size |
+|--|--|--|
+| RT-1 | 52% | 23.8M |
+| Diffusion Policy (UNet) | 64.5% | 76M |
+| Florence (linear head) | 53% | 270.8M |
+| Florence (diffusion head - MDT DiT) | 64% | 322.79M |
+
+</div>
+*Each checkpoint is evaluated with 96 rollouts.
+*A success in the PushT environment requires a final IoU > 95% (which is difficult to locate under low resolution). If you raise the resolution or reduce the threshold, the succes rate will be much higher.
 
 ## Installation
 
