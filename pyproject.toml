@@ -12,6 +12,8 @@ dependencies = [
     "wandb",
     "tqdm",
     "stable-baselines3",
+    "lmdb",
+    "scipy",
 ]
 
 [project.optional-dependencies]

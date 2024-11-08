@@ -32,6 +32,14 @@ class FlorenceMDTNet(nn.Module):
         if freeze_florence:
             for param in self.net.parameters():
                 param.requires_grad = False
+        
+        # not update language embedding for training speed, may harm performance
+        for param in self.net.language_model.model.shared.parameters():
+            param.requires_grad = False
+        for param in self.net.language_model.model.encoder.embed_positions.parameters():
+            param.requires_grad = False
+        for param in self.net.language_model.model.decoder.embed_positions.parameters():
+            param.requires_grad = False
 
         os.environ['TOKENIZERS_PARALLELISM'] = 'true'
         self.tokenizer = AutoProcessor.from_pretrained(path, trust_remote_code=True).tokenizer
@@ -52,7 +60,8 @@ class FlorenceMDTNet(nn.Module):
         self.action_decoder = nn.Sequential(
             nn.Linear(ff_dim, num_actions),
         )
-        self.low_dim_encoder = nn.Linear(lowdim_obs_dim, ff_dim)
+        if lowdim_obs_dim > 0:
+            self.low_dim_encoder = nn.Linear(lowdim_obs_dim, ff_dim)
         self.noise_pred_net = TransformerFiLMDecoder(
             embed_dim=ff_dim, 
             max_T=max_T,
@@ -72,6 +81,9 @@ class FlorenceMDTNet(nn.Module):
             rgb_features = rgb_features.view(B, T*V*N, D)
             
             text_embeds = self.prompt_embeds.repeat(B, 1, 1) # (b n d)
+            if "inst_token" in batch:
+                inst_embeds = self.net.get_input_embeddings()(batch["inst_token"]) 
+                text_embeds = torch.cat((text_embeds, inst_embeds), dim=1)
             inputs_embeds, attention_mask = self.net._merge_input_ids_with_image_features(rgb_features, text_embeds)
 
             action_query = self.action_query.repeat(B, 1, 1) # (b, num_action_query, d)
@@ -82,8 +94,10 @@ class FlorenceMDTNet(nn.Module):
                 output_hidden_states = True,
             )['decoder_hidden_states'][-1]
             obs_features = self.LLM_output_projector(decoder_outputs_embeds)
-            low_dim = self.low_dim_encoder(batch['low_dim']) # (b, t, d)
-            obs_features = torch.cat((obs_features, low_dim), dim=1)
+
+            if "low_dim" in batch:
+                low_dim = self.low_dim_encoder(batch['low_dim']) # (b, t, d)
+                obs_features = torch.cat((obs_features, low_dim), dim=1)
         else:
             obs_features = batch['obs_features']
 

@@ -1,5 +1,6 @@
 import os
 import copy
+import math
 import torch
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusers.schedulers.scheduling_ddim import DDIMScheduler
@@ -71,16 +72,29 @@ class DiffusionPolicy(BasePolicy):
         for key in self.loss_configs:
             loss_func = self.loss_configs[key]['loss_func']
             weight = self.loss_configs[key]['weight']
+
+            # Deal with different diffusion losses
             if self.loss_configs[key]['type'] == 'diffusion':
                 if self.prediction_type == 'epsilon':
-                    loss[key] = loss_func(pred[key], noise[key])
+                    loss[key] = loss_func(pred[key], noise[key], reduction="none")
                 elif self.prediction_type == 'sample':
-                    loss[key] = loss_func(pred[key], batch[key])
+                    loss[key] = loss_func(pred[key], batch[key], reduction="none")
                 elif self.prediction_type == 'v_prediction':
                     target = self.noise_scheduler.get_velocity(batch[key], noise[key], batch['timesteps'])
-                    loss[key] = loss_func(pred[key], target)
+                    loss[key] = loss_func(pred[key], target, reduction="none")
             elif self.loss_configs[key]['type'] == 'simple':
-                loss[key] = loss_func(pred[key], batch[key])
+                loss[key] = loss_func(pred[key], batch[key], reduction="none")
+
+            # Deal with masking
+            data_shape = pred[key].shape
+            if "mask" in batch:
+                mask_shape = batch["mask"].shape
+                for _ in range(len(data_shape) - len(mask_shape)):
+                    new_mask = batch["mask"].unsqueeze(-1)
+                loss[key] = (loss[key] * new_mask).sum() / (new_mask.sum() * math.prod(data_shape[len(mask_shape):]))
+            else:
+                loss[key] = loss[key].sum() / math.prod(data_shape)
+
             loss['total_loss'] += loss[key] * weight
         return loss
 

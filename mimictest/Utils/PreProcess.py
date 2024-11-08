@@ -39,8 +39,9 @@ class PreProcess():
                     Resize(self.configs[key]['rgb_shape'], antialias=True),
                     RandomCrop(self.configs[key]['crop_shape']),
                 )
-            self.configs[key]['max'] = self.configs[key]['max'].to(device)
-            self.configs[key]['min'] = self.configs[key]['min'].to(device)
+            if "max" in self.configs[key]:
+                self.configs[key]['max'] = self.configs[key]['max'].to(device)
+                self.configs[key]['min'] = self.configs[key]['min'].to(device)
     
     def process(self, batch, train=False):
         for key in batch:
@@ -58,14 +59,14 @@ class PreProcess():
                     rot_euler = batch[key][..., 3:6]
                     rot_6d = action_axis_to_6d(rot_euler)
                 batch[key] = torch.cat((batch[key][..., :3], rot_6d, batch[key][..., 6:]), dim=-1)
-            if "binary" not in self.configs[key]:
+            if "max" in self.configs[key]:
                 batch[key] = (batch[key] - self.configs[key]['min']) / (self.configs[key]['max'] - self.configs[key]['min'])
                 batch[key] = batch[key] * 2 - 1 # from (0, 1) to (-1, 1)
         return batch
 
     def back_process(self, batch):
         for key in batch:
-            if "binary" not in self.configs[key]:
+            if "max" in self.configs[key]:
                 batch[key] = (batch[key] + 1) * 0.5 # from (-1, 1) to (0, 1)
                 batch[key] = batch[key] * (self.configs[key]['max'] - self.configs[key]['min']) + self.configs[key]['min']
             if 'rgb_shape' in self.configs[key]: # image data
@@ -89,9 +90,9 @@ class PreProcess():
             batch['action'] = torch.cat((
                 batch['arm_action'],
                 batch['gripper_action'],
-            ), dim=-1).cpu().numpy()
+            ), dim=-1)
         elif "arm_action" in batch: # no gripper action
-            batch['action'] = batch['arm_action'].cpu().numpy()
+            batch['action'] = batch['arm_action']
         elif "action" in batch: # no gripper action
-            batch['action'] = batch['action'].cpu().numpy()
+            batch['action'] = batch['action']
         return batch
