@@ -3,7 +3,7 @@ import math
 import numpy as np
 import torch
 from einops import rearrange
-from moviepy.editor import ImageSequenceClip
+from moviepy.video.io import ImageSequenceClip
 from tqdm import tqdm
 
 class Evaluation():
