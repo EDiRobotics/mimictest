@@ -333,3 +333,15 @@ Or check this [link](https://stackoverflow.com/questions/55313610/importerror-li
 8. `failed to EGL with glad`
 
 The core problem seems to be lack of `libEGL.so.1`. You may try `apt-get update && apt-get install libegl1`. If you find other packages not installed during installing `libegl1`, please install them.
+
+9. `No such file or directory: ‘patchelf’ `
+
+```
+apt install patchelf
+```
+
+10. `from numba.np.ufunc import _internal SystemError: initialization of _internal failed without raising an exception`
+
+```
+pip install -U numba
+```
