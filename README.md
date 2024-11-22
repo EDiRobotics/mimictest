@@ -212,7 +212,7 @@ Now, depending on the environment and model you want, Please perform the followi
 
 The recommended python version is 3.9. You need to install `robomimic` and `robosuite` via:
 ```
-pip install pip install robosuite@https://github.com/cheng-chi/robosuite/archive/277ab9588ad7a4f4b55cf75508b44aa67ec171f0.tar.gz
+pip install robosuite@https://github.com/cheng-chi/robosuite/archive/277ab9588ad7a4f4b55cf75508b44aa67ec171f0.tar.gz
 pip install robomimic
 ```
 
