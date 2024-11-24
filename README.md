@@ -25,6 +25,8 @@ We also have policies trained and tested on the [CALVIN](https://github.com/mees
 **Please remember we build systems for you ヾ(^▽^*)).** Feel free to ask [@StarCycle](https://github.com/StarCycle) if you have any question!
 
 ## News
+**[2024.11.24]** Support Flow Matching.
+
 **[2024.11.1]** Update the performance of PushT environment.
 
 **[2024.8.9]** Several updates below. And we are merging the base Florence policy to HuggingFace LeRobot.
@@ -170,6 +172,7 @@ We implement the following algorithms:
 | Diffusion Policy (Transformer) | 90.5% | 31.5M |
 | Florence (linear head) | 88.5% | 270.8M | 
 | Florence (diffusion head - MDT DiT) | 93.75% | 322.79M |
+| Florence (flow head - MDT DiT) | 89.5% | 322.79M |
 
 </div>
 
@@ -186,6 +189,7 @@ We implement the following algorithms:
 | Diffusion Policy (UNet) | 64.5% | 76M |
 | Florence (linear head) | 53% | 270.8M |
 | Florence (diffusion head - MDT DiT) | 64% | 322.79M |
+| Florence (flow head - MDT DiT) | 69% | 322.79M |
 
 </div>
 
