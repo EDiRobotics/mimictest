@@ -2,16 +2,16 @@ import os
 from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, random_split
-from transformers import get_constant_schedule_with_warmup
+from transformers import get_cosine_schedule_with_warmup
 from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
 from mimictest.Utils.AccelerateFix import AsyncStep
 from mimictest.Utils.PreProcess import PreProcess
-from mimictest.Datasets.RobomimicDataset import CustomMimicDataset, ComputeLimit
+from mimictest.Datasets.PushTDataset import PushTImageDataset
 from mimictest.Datasets.DataPrefetcher import DataPrefetcher
 from mimictest.Wrappers.DiffusionPolicy import DiffusionPolicy
 from mimictest.Nets.FlorenceMDTNet import FlorenceMDTNet
-from mimictest.Simulation.ParallelMimic import ParallelMimic
+from mimictest.Simulation.ParallelPushT import ParallelPushT
 from mimictest.Train import train
 from mimictest.Evaluation import Evaluation
 
@@ -25,48 +25,42 @@ if __name__ == '__main__':
 
     # Dataset
     abs_mode = True # relative EE action space or absolute EE action space
-    if abs_mode:
-        file_name = 'image_abs.hdf5'
-    else:
-        file_name = 'image.hdf5'
-    dataset_path = Path('/root/autodl-tmp/square/ph/') / file_name
-    bs_per_gpu = 192
+    file_name = 'pusht_cchi_v7_replay.zarr'
+    dataset_path = Path('/root/autodl-tmp/pusht/') / file_name
+    bs_per_gpu = 64
     workers_per_gpu = 12
     cache_ratio = 2
 
     # Space
-    limits = ComputeLimit(dataset_path, abs_mode)
-    num_actions_6d = 10
-    lowdim_obs_dim = len(limits['low_dim_max'])
+    num_actions = 2
+    lowdim_obs_dim = 2
     obs_horizon = 2
     chunk_size = 16
     process_configs = {
         'rgb': {
-            'rgb_shape': (84, 84),
-            'crop_shape': (76, 76),
+            'rgb_shape': (96, 96),
+            'crop_shape': (84, 84),
             'max': torch.tensor(1.0),
             'min': torch.tensor(0.0),
         },
         'low_dim': {
-            'max': limits['low_dim_max'], 
-            'min': limits['low_dim_min'],
+            'max': None, # to be filled
+            'min': None,
         },
         'action': {
-            'max': limits['action_max'],
-            'min': limits['action_min'],
-            'enable_6d_rot': True,
-            'abs_mode': True,
+            'max': None, # to be filled
+            'min': None,
         },
     }
 
     # Network
     model_path = Path("microsoft/Florence-2-base")
-    freeze_vision_tower = True
+    freeze_vision_tower = False
     freeze_florence = False
     num_action_query = 64
     max_T = 128
     ff_dim = 128
-    n_heads = 8
+    n_heads = 2
     attn_pdrop = 0.3
     resid_pdrop = 0.1
     mlp_pdrop = 0.05
@@ -78,37 +72,37 @@ if __name__ == '__main__':
     diffuser_train_steps = 10
     diffuser_infer_steps = 10
     diffuser_solver = "flow_euler"
-    beta_schedule = None
-    prediction_type = None
-    clip_sample = None
+    beta_schedule = "squaredcos_cap_v2"
+    prediction_type = 'epsilon'
+    clip_sample = True
     ema_interval = 10
 
     # Training
-    num_training_epochs = 1000
-    save_interval = 80 
+    num_training_epochs = 400
+    save_interval = 50
     load_epoch_id = 0
     gradient_accumulation_steps = 1
     lr_max = 1e-4
     warmup_steps = 5
     weight_decay = 1e-4
     max_grad_norm = 10
-    print_interval = 152
+    print_interval = 360
     do_watch_parameters = False
     record_video = False
     loss_configs = {
         'action': {
-            'loss_func': torch.nn.functional.mse_loss,
+            'loss_func': torch.nn.functional.l1_loss,
             'type': 'flow',
             'weight': 1.0,
-            'shape': (chunk_size, num_actions_6d),
+            'shape': (chunk_size, num_actions),
         },
     }
 
     # Testing (num_envs*num_eval_ep*num_GPU epochs)
     num_envs = 16
     num_eval_ep = 6
-    action_horizon = [0, 8]
-    max_test_ep_len = 400
+    action_horizon = [1, 9]
+    max_test_ep_len = 300
 
     # Preparation
     kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
@@ -118,21 +112,30 @@ if __name__ == '__main__':
         kwargs_handlers=[kwargs],
     )
     device = acc.device
+    dataset = PushTImageDataset(
+        dataset_path, 
+        chunk_size, 
+        obs_horizon, 
+        action_horizon[1] - action_horizon[0],
+    )
+    process_configs['low_dim']['max'] = torch.from_numpy(dataset.stats['agent_pos']['max'])
+    process_configs['low_dim']['min'] = torch.from_numpy(dataset.stats['agent_pos']['min'])
+    process_configs['action']['max'] = torch.from_numpy(dataset.stats['action']['max'])
+    process_configs['action']['min'] = torch.from_numpy(dataset.stats['action']['min'])
     preprocessor = PreProcess(
         process_configs=process_configs,
         device=device,
     )
-    envs = ParallelMimic(dataset_path, num_envs, abs_mode)
+    envs = ParallelPushT(num_envs, max_test_ep_len)
     eva = Evaluation(
         envs, 
         num_envs, 
         preprocessor, 
         obs_horizon,
-        action_horizon, 
+        action_horizon,
         save_path,
         device,
     )
-    dataset = CustomMimicDataset(dataset_path, obs_horizon, chunk_size, start_ratio=0, end_ratio=1)
     loader = DataLoader(
         dataset=dataset,
         sampler=None, 
@@ -145,9 +148,9 @@ if __name__ == '__main__':
         path=model_path,
         freeze_vision_tower=freeze_vision_tower,
         freeze_florence=freeze_florence,
-        num_actions=num_actions_6d,
+        num_actions=num_actions,
         num_action_query=num_action_query,
-        lowdim_obs_dim=len(limits['low_dim_max']),
+        lowdim_obs_dim=lowdim_obs_dim,
         max_T=max_T,
         ff_dim=ff_dim,
         n_heads=n_heads,
@@ -170,8 +173,12 @@ if __name__ == '__main__':
     )
     policy.load_pretrained(acc, save_path, load_epoch_id)
     policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
-    optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
-    scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
+    optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=False)
+    scheduler = get_cosine_schedule_with_warmup(
+        optimizer, 
+        num_warmup_steps=warmup_steps, 
+        num_training_steps=num_training_epochs,
+    )
     policy.net, policy.ema_net, optimizer, loader = acc.prepare(
         policy.net, 
         policy.ema_net, 
