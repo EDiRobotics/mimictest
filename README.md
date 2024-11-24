@@ -241,7 +241,7 @@ If you only want to download a subset of the data, e.g., the square task with im
 The recommended python version is 3.19. You can install the environment via 
 
 ```
-pip install gym-pusht
+pip install -e .[pusht]
 ```
 
 Then you can download the PushT dataset from the [official link](https://diffusion-policy.cs.columbia.edu/data/training/).
