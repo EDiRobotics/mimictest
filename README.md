@@ -172,6 +172,7 @@ We implement the following algorithms:
 | Diffusion Policy (Transformer) | 90.5% | 31.5M |
 | Florence (linear head) | 88.5% | 270.8M | 
 | Florence (diffusion head - MDT DiT) | 93.75% | 322.79M |
+| Florence (flow pi0) | 95% | 322.79M |
 | Florence (flow head - MDT DiT) | 89.5% | 322.79M |
 
 </div>
@@ -190,6 +191,7 @@ We implement the following algorithms:
 | Florence (linear head) | 53% | 270.8M |
 | Florence (diffusion head - MDT DiT) | 64% | 322.79M |
 | Florence (flow head - MDT DiT) | 69% | 322.79M |
+| Florence (flow pi0) | 79% | 322.79M |
 
 </div>
 
