@@ -25,6 +25,17 @@ We also have policies trained and tested on the [CALVIN](https://github.com/mees
 **Please remember we build systems for you ヾ(^▽^*)).** Feel free to ask [@StarCycle](https://github.com/StarCycle) if you have any question!
 
 ## News
+**[2024.11.25]** Add a new network **Florence-pi0**, which can be used for diffusion / flow matching training.
+
+<details>
+  <summary> The Florence-pi0 architecture </summary>
+
+![图片](https://github.com/user-attachments/assets/3b83ef28-c801-40b4-aae0-e26332aedcc4)
+
+</details>
+
+**[2024.11.24]** Support Flow Matching.
+
 **[2024.11.1]** Update the performance of PushT environment.
 
 **[2024.8.9]** Several updates below. And we are merging the base Florence policy to HuggingFace LeRobot.
@@ -170,6 +181,8 @@ We implement the following algorithms:
 | Diffusion Policy (Transformer) | 90.5% | 31.5M |
 | Florence (linear head) | 88.5% | 270.8M | 
 | Florence (diffusion head - MDT DiT) | 93.75% | 322.79M |
+| Florence (flow pi0) | 95% | 322.79M |
+| Florence (flow head - MDT DiT) | 89.5% | 322.79M |
 
 </div>
 
@@ -186,6 +199,8 @@ We implement the following algorithms:
 | Diffusion Policy (UNet) | 64.5% | 76M |
 | Florence (linear head) | 53% | 270.8M |
 | Florence (diffusion head - MDT DiT) | 64% | 322.79M |
+| Florence (flow head - MDT DiT) | 69% | 322.79M |
+| Florence (flow pi0) | 79% | 322.79M |
 
 </div>
 
@@ -212,7 +227,7 @@ Now, depending on the environment and model you want, Please perform the followi
 
 The recommended python version is 3.9. You need to install `robomimic` and `robosuite` via:
 ```
-pip install pip install robosuite@https://github.com/cheng-chi/robosuite/archive/277ab9588ad7a4f4b55cf75508b44aa67ec171f0.tar.gz
+pip install robosuite@https://github.com/cheng-chi/robosuite/archive/277ab9588ad7a4f4b55cf75508b44aa67ec171f0.tar.gz
 pip install robomimic
 ```
 
@@ -241,7 +256,7 @@ If you only want to download a subset of the data, e.g., the square task with im
 The recommended python version is 3.19. You can install the environment via 
 
 ```
-pip install gym-pusht
+pip install -e .[pusht]
 ```
 
 Then you can download the PushT dataset from the [official link](https://diffusion-policy.cs.columbia.edu/data/training/).
@@ -333,3 +348,15 @@ Or check this [link](https://stackoverflow.com/questions/55313610/importerror-li
 8. `failed to EGL with glad`
 
 The core problem seems to be lack of `libEGL.so.1`. You may try `apt-get update && apt-get install libegl1`. If you find other packages not installed during installing `libegl1`, please install them.
+
+9. `No such file or directory: ‘patchelf’ `
+
+```
+apt install patchelf
+```
+
+10. `from numba.np.ufunc import _internal SystemError: initialization of _internal failed without raising an exception`
+
+```
+pip install -U numba
+```
