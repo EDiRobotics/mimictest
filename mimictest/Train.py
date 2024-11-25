@@ -82,6 +82,8 @@ def train(
             if batch_idx_cross_epoch % save_interval == 0 and batch_idx_cross_epoch != 0:
                 # in the 1st epoch, policy.ema has not been initialized. You may also load the wrong ckpt and modify the right one
                 policy.save_pretrained(acc, save_path, batch_idx_cross_epoch + load_batch_id)
+            
+            if batch_idx_cross_epoch % print_interval == 0 and batch_idx_cross_epoch != 0:
                 if eva is not None:
                     avg_reward = torch.tensor(eva.evaluate_on_env(
                         acc,
@@ -93,7 +95,6 @@ def train(
                     )).to(device)
                     avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
 
-            if batch_idx_cross_epoch % print_interval == 0 and batch_idx_cross_epoch != 0:
                 avg_metric['dataload_percent_first_gpu'] = avg_metric['dataload_time'] * print_interval / (time()-clock)
                 avg_metric['lr'] = scheduler.get_last_lr()[0]
                 avg_metric['reward'] = avg_reward

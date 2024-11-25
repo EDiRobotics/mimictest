@@ -26,8 +26,8 @@ if __name__ == '__main__':
     abs_mode = True # relative EE action space or absolute EE action space
     folder_name = 'lmdb_droid'
     dataset_path = Path('/root/autodl-tmp/') / folder_name
-    bs_per_gpu = 128
-    workers_per_gpu = 12 
+    bs_per_gpu = 160
+    workers_per_gpu = 15 
     cache_ratio = 2
 
     # Space
@@ -77,14 +77,14 @@ if __name__ == '__main__':
 
     # Training
     num_training_epochs = 50
-    save_interval = 100
-    load_batch_id = 0
-    gradient_accumulation_steps = 1
+    save_interval = 5000
+    load_batch_id = 85000
+    gradient_accumulation_steps = 2
     lr_max = 1e-4
     warmup_steps = 5
     weight_decay = 1e-4
     max_grad_norm = 10
-    print_interval = 100
+    print_interval = 500
     do_watch_parameters = False
     record_video = True
     loss_configs = {

@@ -133,12 +133,10 @@ class DiffusionPolicy(BasePolicy):
         if hasattr(acc.unwrap_model(self.net), '_orig_mod'): # the model has been compiled
             ckpt = {"net": acc.unwrap_model(self.net)._orig_mod.state_dict()}
             if self.use_ema:
-                self.ema.copy_to(self.ema_net.parameters())
                 ckpt["ema"] = acc.unwrap_model(self.ema_net)._orig_mod.state_dict()
         else:
             ckpt = {"net": acc.unwrap_model(self.net).state_dict()}
             if self.use_ema:
-                self.ema.copy_to(self.ema_net.parameters())
                 ckpt["ema"] = acc.unwrap_model(self.ema_net).state_dict()
         acc.save(ckpt, path / f'policy_{epoch_id}.pth')
 
@@ -159,3 +157,6 @@ class DiffusionPolicy(BasePolicy):
 
     def update_ema(self):
         self.ema.step(self.net.parameters())
+
+    def copy_ema_to_ema_net(self):
+        self.ema.copy_to(self.ema_net.parameters())

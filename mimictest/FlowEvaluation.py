@@ -17,6 +17,7 @@ class Evaluation():
 
     def evaluate_on_env(self, acc, policy, batch_idx, num_eval_ep, max_test_ep_len, record_video=False):
         if policy.use_ema:
+            policy.copy_ema_to_ema_net()
             policy.ema_net.eval()
         else:
             policy.net.eval()
@@ -51,8 +52,8 @@ class Evaluation():
                 )
                 axs[1, image_idx].axis('off')
 
-            # TODO: wandb_tracker = acc.get_tracker("wandb")
-            # TODO: wandb_tracker.log({f"vis": fig}, commit=False)
+            wandb_tracker = acc.get_tracker("wandb")
+            wandb_tracker.log({f"vis": fig}, commit=False)
             fig.savefig(self.save_path/f"vis_{batch_idx}.png")
             plt.close(fig)
 
