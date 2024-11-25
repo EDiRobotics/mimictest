@@ -25,6 +25,15 @@ We also have policies trained and tested on the [CALVIN](https://github.com/mees
 **Please remember we build systems for you ヾ(^▽^*)).** Feel free to ask [@StarCycle](https://github.com/StarCycle) if you have any question!
 
 ## News
+**[2024.11.25]** Add a new network **Florence-pi0**, which can be used for diffusion / flow matching training.
+
+<details>
+  <summary> The Florence-pi0 architecture </summary>
+
+![图片](https://github.com/user-attachments/assets/3b83ef28-c801-40b4-aae0-e26332aedcc4)
+
+</details>
+
 **[2024.11.24]** Support Flow Matching.
 
 **[2024.11.1]** Update the performance of PushT environment.
