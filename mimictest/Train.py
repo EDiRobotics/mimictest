@@ -25,6 +25,7 @@ def train(
     print_interval,
     bs_per_gpu,
     max_grad_norm,
+    use_wandb,
     record_video,
     do_profile,
 ):
@@ -110,7 +111,8 @@ def train(
                 for key in avg_metric:
                     text = text + ' {}: {:.5f}'.format(key, avg_metric[key])
                 acc.print(text)
-                acc.log(avg_metric)
+                if use_wandb:
+                    acc.log(avg_metric)
                 for key in avg_metric:
                     avg_metric[key] = 0 
 
