@@ -87,6 +87,7 @@ if __name__ == '__main__':
     weight_decay = 1e-4
     max_grad_norm = 10
     print_interval = 60
+    use_wandb = False
     do_watch_parameters = False
     record_video = False
     loss_configs = {
@@ -157,7 +158,8 @@ if __name__ == '__main__':
         do_compile=do_compile,
     )
     policy.load_pretrained(acc, save_path, load_epoch_id)
-    policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
+    if use_wandb:
+        policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
     optimizer = torch.optim.AdamW(policy.net.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
     scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
     policy.net, optimizer, loader = acc.prepare(
@@ -188,6 +190,7 @@ if __name__ == '__main__':
             print_interval=print_interval,
             bs_per_gpu=bs_per_gpu,
             max_grad_norm=max_grad_norm,
+            use_wandb=use_wandb,
             record_video=record_video,
             do_profile=do_profile,
         )

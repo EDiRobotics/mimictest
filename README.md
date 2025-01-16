@@ -360,3 +360,7 @@ apt install patchelf
 ```
 pip install -U numba
 ```
+
+11. `AttributeError: module 'OpenGL.EGL' has no attribute 'EGLDeviceEXT'`
+
+Ensure PyOpenGL version is v3.1.4 and not v3.1.0
