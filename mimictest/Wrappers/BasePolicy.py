@@ -54,14 +54,14 @@ class BasePolicy():
         if os.path.isfile(path / "wandb_id.json"):
             run_id = json.load(open(path / "wandb_id.json", "r"))
             acc.init_trackers(
-                project_name="mimictest", 
+                project_name="droidflow", 
                 init_kwargs={"wandb": {"id": run_id, "resume": "allow"}}
             )
             if acc.is_main_process:
                 if do_watch_parameters:
                     wandb.watch(self.net, log="all", log_freq=save_interval)
         else: 
-            acc.init_trackers(project_name="mimictest")
+            acc.init_trackers(project_name="droidflow")
             if acc.is_main_process:
                 tracker = acc.get_tracker("wandb")
                 json.dump(tracker.run.id, open(path / "wandb_id.json", "w"))
@@ -74,7 +74,18 @@ class BasePolicy():
         for key in self.loss_configs:
             loss_func = self.loss_configs[key]['loss_func']
             weight = self.loss_configs[key]['weight']
-            loss[key] = loss_func(pred[key], batch[key])
+            loss[key] = loss_func(pred[key], batch[key], reduction="none")
+
+            # Deal with masking
+            data_shape = pred[key].shape
+            if "mask" in batch:
+                mask_shape = batch["mask"].shape
+                for _ in range(len(data_shape) - len(mask_shape)):
+                    new_mask = batch["mask"].unsqueeze(-1)
+                loss[key] = (loss[key] * new_mask).sum() / (new_mask.sum() * math.prod(data_shape[len(mask_shape):]))
+            else:
+                loss[key] = loss[key].sum() / math.prod(data_shape)
+
             loss['total_loss'] += loss[key] * weight
         return loss
 

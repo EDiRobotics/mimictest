@@ -46,7 +46,8 @@ class FlorencePi0Net(nn.Module):
         self.prompt_embeds = nn.Parameter(self.net.get_input_embeddings()(prompt_token_ids), requires_grad=False)
 
         token_dim = self.net.language_model.model.decoder.embed_tokens.embedding_dim
-        self.low_dim_encoder = nn.Linear(lowdim_obs_dim, token_dim)
+        if lowdim_obs_dim > 0:
+            self.low_dim_encoder = nn.Linear(lowdim_obs_dim, token_dim)
         self.action_encoder = nn.Linear(num_actions, token_dim)
         self.action_timestep_mixer = nn.Sequential(
             nn.Linear(2*token_dim, token_dim),
@@ -74,15 +75,17 @@ class FlorencePi0Net(nn.Module):
             inputs_embeds = batch['obs_features']
             obs_features = batch['obs_features']
 
-        low_dim = self.low_dim_encoder(batch['low_dim']) # (b, t, d)
-
         noisy_actions = self.action_encoder(batch['noisy_inputs']['action'])
         B, T, D = noisy_actions.shape
         time_emb = self.time_emb(batch["timesteps"]).unsqueeze(1).repeat(1, T, 1) # (b t d)
         noisy_actions = torch.cat((noisy_actions, time_emb), dim=-1) # (b t 2d)
         noisy_actions = self.action_timestep_mixer(noisy_actions) # (b t d)
 
-        decoder_inputs_embeds = torch.cat((low_dim, noisy_actions), dim=1)
+        if "low_dim" in batch:
+            low_dim = self.low_dim_encoder(batch['low_dim']) # (b, t, d)
+            decoder_inputs_embeds = torch.cat((low_dim, noisy_actions), dim=1)
+        else:
+            decoder_inputs_embeds = noisy_actions
         decoder_outputs_embeds = self.net.language_model(
             inputs_embeds = inputs_embeds,
             decoder_inputs_embeds = decoder_inputs_embeds,

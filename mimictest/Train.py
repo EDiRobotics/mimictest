@@ -20,7 +20,7 @@ def train(
     max_test_ep_len,
     device, 
     save_path,
-    load_epoch_id,
+    load_batch_id,
     save_interval,
     print_interval,
     bs_per_gpu,
@@ -34,7 +34,7 @@ def train(
             schedule = torch.profiler.schedule(
                 wait=20,
                 warmup=3,
-                active=4,
+                active=2,
                 repeat=1,
             ),
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
@@ -47,33 +47,21 @@ def train(
         )
         prof.start()
 
-    dataset_len = len(prefetcher.loader.dataset)
+    batch_idx_cross_epoch = 0
+    batch_metric = {
+        'total_loss': 0,
+        'grad_norm_before_clip': 0,
+        'dataload_time': 0,
+    } 
+    for key in policy.loss_configs:
+        batch_metric[key] = 0
+    avg_metric = copy.deepcopy(batch_metric) # average over batches
     avg_reward = 0.0
-    for epoch in tqdm(range(num_training_epochs), desc=f"train epochs", disable=not acc.is_main_process):
-        if epoch % save_interval == 0:
-            if epoch != 0: 
-                # in the 1st epoch, policy.ema has not been initialized. You may also load the wrong ckpt and modify the right one
-                policy.save_pretrained(acc, save_path, epoch+load_epoch_id)
-                avg_reward = torch.tensor(eva.evaluate_on_env(
-                    acc,
-                    policy, 
-                    epoch,
-                    num_eval_ep, 
-                    max_test_ep_len,
-                    record_video,
-                )).to(device)
-                avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
+    clock = time()
+    dataset_len = len(prefetcher.loader.dataset)
 
-        batch_metric = {
-            'total_loss': 0,
-            'grad_norm_before_clip': 0,
-            'dataload_time': 0,
-        } 
-        for key in policy.loss_configs:
-            batch_metric[key] = 0
-        avg_metric = copy.deepcopy(batch_metric) # average over batches
-        clock = time()
-        batch_idx = 0
+    for epoch in tqdm(range(num_training_epochs), desc=f"train epochs", disable=not acc.is_main_process):
+        batch_idx_in_epoch = 0
         batch, batch_metric['dataload_time'] = prefetcher.next()
         while batch is not None:
             with acc.accumulate(policy.net):
@@ -85,14 +73,29 @@ def train(
                 if acc.sync_gradients:
                     batch_metric['grad_norm_before_clip'] = acc.clip_grad_norm_(policy.parameters(), max_grad_norm)
                 optimizer.step(optimizer)
-                if policy.use_ema and batch_idx % policy.ema_interval == 0:
+                if policy.use_ema and batch_idx_cross_epoch % policy.ema_interval == 0:
                     policy.update_ema()
                 for key in loss:
                     batch_metric[key] = loss[key].detach()
                 for key in batch_metric:
                     avg_metric[key] += batch_metric[key] / print_interval
 
-            if batch_idx % print_interval == 0 and batch_idx != 0:
+            if batch_idx_cross_epoch % save_interval == 0 and batch_idx_cross_epoch != 0:
+                # in the 1st epoch, policy.ema has not been initialized. You may also load the wrong ckpt and modify the right one
+                policy.save_pretrained(acc, save_path, batch_idx_cross_epoch + load_batch_id)
+            
+            if batch_idx_cross_epoch % print_interval == 0 and batch_idx_cross_epoch != 0:
+                if eva is not None:
+                    avg_reward = torch.tensor(eva.evaluate_on_env(
+                        acc,
+                        policy, 
+                        batch_idx_cross_epoch,
+                        num_eval_ep, 
+                        max_test_ep_len,
+                        record_video,
+                    )).to(device)
+                    avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
+
                 avg_metric['dataload_percent_first_gpu'] = avg_metric['dataload_time'] * print_interval / (time()-clock)
                 avg_metric['lr'] = scheduler.get_last_lr()[0]
                 avg_metric['reward'] = avg_reward
@@ -104,9 +107,9 @@ def train(
                         avg_metric[key] = acc.gather_for_metrics(avg_metric[key]).mean()
                 text = '\nTrain Epoch: {} [{}/{} ({:.0f}%)]'.format(
                     epoch, 
-                    batch_idx * bs_per_gpu * acc.num_processes, 
+                    batch_idx_in_epoch * bs_per_gpu * acc.num_processes, 
                     dataset_len, 
-                    100. * batch_idx * bs_per_gpu * acc.num_processes / dataset_len, 
+                    100. * batch_idx_in_epoch * bs_per_gpu * acc.num_processes / dataset_len, 
                 )
                 for key in avg_metric:
                     text = text + ' {}: {:.5f}'.format(key, avg_metric[key])
@@ -116,12 +119,15 @@ def train(
                 for key in avg_metric:
                     avg_metric[key] = 0 
 
-            batch_idx += 1
+                scheduler.step()
+            
+            batch_idx_cross_epoch += 1
+            batch_idx_in_epoch += 1
             batch, batch_metric['dataload_time'] = prefetcher.next()
+
             if do_profile:
                 prof.step()
-                if batch_idx == 28:
+                if batch_idx_cross_epoch == 28:
                     prof.stop()
                     acc.print("Profiling log saved in ", str(save_path/'prof'))
                     acc.print("Visualize the profiling log by tensorboard with torch_tb_profiler plugin, see https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html")
-        scheduler.step()

@@ -1,5 +1,6 @@
 import os
 import copy
+import math
 import torch
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusers.schedulers.scheduling_ddim import DDIMScheduler
@@ -67,9 +68,9 @@ class DiffusionPolicy(BasePolicy):
             if self.loss_configs[key]['type'] == 'diffusion':
                 noise[key] = torch.randn((B,)+self.loss_configs[key]['shape'], device=device)
                 batch['noisy_inputs'][key] = self.noise_scheduler.add_noise(
-                    sample=batch[key], 
+                    original_samples=batch[key], 
                     noise=noise[key], 
-                    timestep=batch['timesteps'],
+                    timesteps=batch['timesteps'],
                 )
             elif self.loss_configs[key]['type'] == 'flow':
                 noise[key] = torch.randn((B,)+self.loss_configs[key]['shape'], device=device)
@@ -87,18 +88,31 @@ class DiffusionPolicy(BasePolicy):
         for key in self.loss_configs:
             loss_func = self.loss_configs[key]['loss_func']
             weight = self.loss_configs[key]['weight']
+
+            # Deal with different diffusion losses
             if self.loss_configs[key]['type'] == 'diffusion':
                 if self.prediction_type == 'epsilon':
-                    loss[key] = loss_func(pred[key], noise[key])
+                    loss[key] = loss_func(pred[key], noise[key], reduction="none")
                 elif self.prediction_type == 'sample':
-                    loss[key] = loss_func(pred[key], batch[key])
+                    loss[key] = loss_func(pred[key], batch[key], reduction="none")
                 elif self.prediction_type == 'v_prediction':
                     target = self.noise_scheduler.get_velocity(batch[key], noise[key], batch['timesteps'])
-                    loss[key] = loss_func(pred[key], target)
+                    loss[key] = loss_func(pred[key], target, reduction="none")
             elif self.loss_configs[key]['type'] == 'flow':
-                loss[key] = loss_func(pred[key], noise[key] - batch[key])
+                loss[key] = loss_func(pred[key], noise[key] - batch[key], reduction="none")
             elif self.loss_configs[key]['type'] == 'simple':
-                loss[key] = loss_func(pred[key], batch[key])
+                loss[key] = loss_func(pred[key], batch[key], reduction="none")
+
+            # Deal with masking
+            data_shape = pred[key].shape
+            if "mask" in batch:
+                mask_shape = batch["mask"].shape
+                for _ in range(len(data_shape) - len(mask_shape)):
+                    new_mask = batch["mask"].unsqueeze(-1)
+                loss[key] = (loss[key] * new_mask).sum() / (new_mask.sum() * math.prod(data_shape[len(mask_shape):]))
+            else:
+                loss[key] = loss[key].sum() / math.prod(data_shape)
+
             loss['total_loss'] += loss[key] * weight
         return loss
 
@@ -143,12 +157,10 @@ class DiffusionPolicy(BasePolicy):
         if hasattr(acc.unwrap_model(self.net), '_orig_mod'): # the model has been compiled
             ckpt = {"net": acc.unwrap_model(self.net)._orig_mod.state_dict()}
             if self.use_ema:
-                self.ema.copy_to(self.ema_net.parameters())
                 ckpt["ema"] = acc.unwrap_model(self.ema_net)._orig_mod.state_dict()
         else:
             ckpt = {"net": acc.unwrap_model(self.net).state_dict()}
             if self.use_ema:
-                self.ema.copy_to(self.ema_net.parameters())
                 ckpt["ema"] = acc.unwrap_model(self.ema_net).state_dict()
         acc.save(ckpt, path / f'policy_{epoch_id}.pth')
 
@@ -169,3 +181,6 @@ class DiffusionPolicy(BasePolicy):
 
     def update_ema(self):
         self.ema.step(self.net.parameters())
+
+    def copy_ema_to_ema_net(self):
+        self.ema.copy_to(self.ema_net.parameters())

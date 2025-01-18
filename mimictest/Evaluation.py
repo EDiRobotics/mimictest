@@ -33,8 +33,9 @@ class Evaluation():
         else:
             raise ValueError(f"Evaluation.py: buffer len {len(self.rgb_buffer)}")
 
-    def evaluate_on_env(self, acc, policy, epoch, num_eval_ep, max_test_ep_len, record_video=False):
+    def evaluate_on_env(self, acc, policy, batch_idx, num_eval_ep, max_test_ep_len, record_video=False):
         if policy.use_ema:
+            policy.copy_ema_to_ema_net()
             policy.ema_net.eval()
         else:
             policy.net.eval()
@@ -61,7 +62,7 @@ class Evaluation():
                     }
                     batch = self.preprcs.process(batch, train=False)
                     pred = policy.infer(batch)
-                    pred_actions = self.preprcs.back_process(pred)['action']
+                    pred_actions = self.preprcs.back_process(pred)['action'].cpu().numpy()
                     for action_id in range(self.action_horizon[0], self.action_horizon[1]):
                         obs, rw, done, info = self.envs.step(pred_actions[:, action_id])
                         self.fill_buffer(obs)
@@ -87,7 +88,7 @@ class Evaluation():
                 print(f'gpu{acc.process_index}_epidose{ep}: rewards {rewards}')
                 if record_video:
                     for env_id in range(self.num_envs):
-                        prefix = f'epoch{epoch}_gpu{acc.process_index}_episode{ep}_env{env_id}_reward{rewards[env_id]}'
+                        prefix = f'batch{batch_idx}_gpu{acc.process_index}_episode{ep}_env{env_id}_reward{rewards[env_id]}'
                         for camera_id in range(self.num_cameras):
                             clip = ImageSequenceClip(videos[camera_id][env_id], fps=30)
                             clip.write_gif(self.save_path / (prefix+f'_camera{camera_id}.gif'), fps=30)
