@@ -7,12 +7,12 @@ from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
 from mimictest.Utils.AccelerateFix import AsyncStep
 from mimictest.Utils.PreProcess import PreProcess
-from mimictest.Datasets.DroidFlowDataset import DroidFlowDataset
+from mimictest.Datasets.DroidLMDBDataset import DroidLMDBDataset
 from mimictest.Datasets.DataPrefetcher import DataPrefetcher
 from mimictest.Wrappers.DiffusionPolicy import DiffusionPolicy
-from mimictest.Nets.FlorenceMDTNet import FlorenceMDTNet
+from mimictest.Nets.FlorencePi0Net import FlorencePi0Net
 from mimictest.Train import train
-from mimictest.FlowEvaluation import Evaluation
+from mimictest.DroidEvaluation import Evaluation
 
 if __name__ == '__main__':
     # Script-specific settings 
@@ -24,17 +24,18 @@ if __name__ == '__main__':
 
     # Dataset
     abs_mode = True # relative EE action space or absolute EE action space
-    folder_name = 'lmdb_droid'
+    folder_name = 'droid_lmdb'
     dataset_path = Path('/root/autodl-tmp/') / folder_name
-    bs_per_gpu = 160
-    workers_per_gpu = 15 
+    bs_per_gpu = 1 # TODO
+    workers_per_gpu = 12 
     cache_ratio = 2
 
     # Space
-    num_actions = 2
+    num_actions = 7
+    num_actions_6d = 10
     lowdim_obs_dim = 0
     obs_horizon = 1
-    chunk_size = 100
+    chunk_size = 20
     process_configs = {
         'rgb': {
             'rgb_shape': (320, 320), # Initial resolution is (180, 320)
@@ -43,56 +44,50 @@ if __name__ == '__main__':
             'min': torch.tensor(0.0),
         },
         'action': {
-            'max': torch.tensor([50, 50]), 
-            'min': torch.tensor([-50, -50]), 
+            'enable_6d_rot': True,
+            'abs_mode': abs_mode,
+            'max': None, # to be filled
+            'min': None,
         },
         'inst_token': {},
         'mask': {},
-        'flow_start': {},
     }
 
     # Network
     model_path = Path("microsoft/Florence-2-base")
     freeze_vision_tower = True
     freeze_florence = False
-    num_action_query = 64
-    max_T = 512
-    ff_dim = 256
-    n_heads = 4
-    attn_pdrop = 0.3
-    resid_pdrop = 0.1
-    mlp_pdrop = 0.05
-    n_layers = 8
     do_compile = False
     do_profile = False
 
     # Diffusion
     diffuser_train_steps = 10
     diffuser_infer_steps = 10
-    diffuser_solver = "ddim"
-    beta_schedule = "squaredcos_cap_v2"
-    prediction_type = 'epsilon'
-    clip_sample = False
+    diffuser_solver = "flow_euler"
+    beta_schedule = None
+    prediction_type = None
+    clip_sample = None
     ema_interval = 10
 
     # Training
     num_training_epochs = 50
     save_interval = 5000
-    load_batch_id = 85000
+    load_batch_id = 0
     gradient_accumulation_steps = 2
-    lr_max = 1e-4
+    lr_max = 2e-5
     warmup_steps = 5
     weight_decay = 1e-4
     max_grad_norm = 10
-    print_interval = 500
+    print_interval = 100
+    use_wandb = False
     do_watch_parameters = False
     record_video = True
     loss_configs = {
         'action': {
             'loss_func': torch.nn.functional.l1_loss,
-            'type': 'diffusion',
+            'type': 'flow',
             'weight': 1.0,
-            'shape': (chunk_size, num_actions),
+            'shape': (chunk_size, num_actions_6d),
         },
     }
 
@@ -104,20 +99,23 @@ if __name__ == '__main__':
         kwargs_handlers=[kwargs],
     )
     device = acc.device
-    train_dataset = DroidFlowDataset(
+    train_dataset = DroidLMDBDataset(
         dataset_path=dataset_path, 
         obs_horizon=obs_horizon, 
         chunk_size=chunk_size, 
         start_ratio=0,
         end_ratio=0.9,
     )
-    test_dataset = DroidFlowDataset(
+    test_dataset = DroidLMDBDataset(
         dataset_path=dataset_path, 
         obs_horizon=obs_horizon, 
         chunk_size=chunk_size, 
         start_ratio=0.9,
         end_ratio=1,
     )
+    limit = train_dataset.get_action_range(abs_mode)
+    process_configs['action']['max'] = limit['action_max']
+    process_configs['action']['min'] = limit['action_min']
     preprocessor = PreProcess(
         process_configs=process_configs,
         device=device,
@@ -138,20 +136,11 @@ if __name__ == '__main__':
         num_workers=workers_per_gpu,
         drop_last=True,     
     )
-    net = FlorenceMDTNet(
+    net = FlorencePi0Net(
         path=model_path,
         freeze_vision_tower=freeze_vision_tower,
-        freeze_florence=freeze_florence,
-        num_actions=num_actions,
-        num_action_query=num_action_query,
+        num_actions=num_actions_6d,
         lowdim_obs_dim=lowdim_obs_dim,
-        max_T=max_T,
-        ff_dim=ff_dim,
-        n_heads=n_heads,
-        attn_pdrop=attn_pdrop,
-        resid_pdrop=resid_pdrop,
-        n_layers=n_layers,
-        mlp_pdrop=mlp_pdrop,
     ).to(device)
     policy = DiffusionPolicy(
         net=net,
@@ -166,7 +155,8 @@ if __name__ == '__main__':
         prediction_type=prediction_type,
     )
     policy.load_pretrained(acc, save_path, load_batch_id)
-    policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
+    if use_wandb:
+        policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
     optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
     scheduler = get_constant_schedule_with_warmup(
         optimizer, 
@@ -211,6 +201,7 @@ if __name__ == '__main__':
             print_interval=print_interval,
             bs_per_gpu=bs_per_gpu,
             max_grad_norm=max_grad_norm,
+            use_wandb=use_wandb,
             record_video=record_video,
             do_profile=do_profile,
         )

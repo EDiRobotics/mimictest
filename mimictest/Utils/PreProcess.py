@@ -10,7 +10,7 @@ def action_euler_to_6d(rot_euler):
 def action_axis_to_6d(rot_axis):
     rot_mat = rot.axis_angle_to_matrix(rot_axis)
     rot_6d = rot.matrix_to_rotation_6d(rot_mat)
-    return rot_6d
+    return torch.nan_to_num(rot_6d, nan=0)
 
 def action_6d_to_euler(rot_6d):
     rot_mat = rot.rotation_6d_to_matrix(rot_6d)
@@ -57,7 +57,7 @@ class PreProcess():
                     rot_6d = action_axis_to_6d(rot_axis)
                 else:
                     rot_euler = batch[key][..., 3:6]
-                    rot_6d = action_axis_to_6d(rot_euler)
+                    rot_6d = action_euler_to_6d(rot_euler)
                 batch[key] = torch.cat((batch[key][..., :3], rot_6d, batch[key][..., 6:]), dim=-1)
             if "max" in self.configs[key]:
                 batch[key] = (batch[key] - self.configs[key]['min']) / (self.configs[key]['max'] - self.configs[key]['min'])

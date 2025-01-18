@@ -68,9 +68,9 @@ class DiffusionPolicy(BasePolicy):
             if self.loss_configs[key]['type'] == 'diffusion':
                 noise[key] = torch.randn((B,)+self.loss_configs[key]['shape'], device=device)
                 batch['noisy_inputs'][key] = self.noise_scheduler.add_noise(
-                    sample=batch[key], 
+                    original_samples=batch[key], 
                     noise=noise[key], 
-                    timestep=batch['timesteps'],
+                    timesteps=batch['timesteps'],
                 )
             elif self.loss_configs[key]['type'] == 'flow':
                 noise[key] = torch.randn((B,)+self.loss_configs[key]['shape'], device=device)
