@@ -109,7 +109,7 @@ class DiffusionPolicy(BasePolicy):
                 mask_shape = batch["mask"].shape
                 for _ in range(len(data_shape) - len(mask_shape)):
                     new_mask = batch["mask"].unsqueeze(-1)
-                loss[key] = (loss[key] * new_mask).sum() / (new_mask.sum() * math.prod(data_shape[len(mask_shape):]))
+                loss[key] = (loss[key] * new_mask).sum() / (new_mask.sum() * math.prod(data_shape[len(mask_shape):]) + 1e-6)
             else:
                 loss[key] = loss[key].sum() / math.prod(data_shape)
 
