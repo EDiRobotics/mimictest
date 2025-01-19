@@ -45,6 +45,9 @@ class FlorenceNet(nn.Module):
         rgb_features = rgb_features.reshape(B, T*V*N, D)
 
         text_embeds = self.prompt_embeds.repeat(B, 1, 1) # (b n d)
+        if "inst_token" in batch:
+            inst_embeds = self.net.get_input_embeddings()(batch["inst_token"]) 
+            text_embeds = torch.cat((text_embeds, inst_embeds), dim=1)
         inputs_embeds, attention_mask = self.net._merge_input_ids_with_image_features(rgb_features, text_embeds)
 
         low_dim = self.low_dim_encoder(batch['low_dim']) # (b, t, d)
