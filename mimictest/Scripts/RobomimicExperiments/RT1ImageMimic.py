@@ -80,13 +80,14 @@ if __name__ == '__main__':
     # Training
     num_training_epochs = 1000
     save_interval = 50 
-    load_epoch_id = 0
+    load_batch_id = 0
     gradient_accumulation_steps = 1
     lr_max = 1e-4
     warmup_steps = 5
     weight_decay = 1e-4
     max_grad_norm = 10
     print_interval = 60
+    eval_interval = print_interval * 20
     use_wandb = False
     do_watch_parameters = False
     record_video = False
@@ -157,7 +158,7 @@ if __name__ == '__main__':
         loss_configs=loss_configs,
         do_compile=do_compile,
     )
-    policy.load_pretrained(acc, save_path, load_epoch_id)
+    policy.load_pretrained(acc, save_path, load_batch_id)
     if use_wandb:
         policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
     optimizer = torch.optim.AdamW(policy.net.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
@@ -185,9 +186,10 @@ if __name__ == '__main__':
             max_test_ep_len=max_test_ep_len,
             device=device,
             save_path=save_path,
-            load_epoch_id=load_epoch_id,
+            load_batch_id=load_batch_id,
             save_interval=save_interval,
             print_interval=print_interval,
+            eval_interval=eval_interval,
             bs_per_gpu=bs_per_gpu,
             max_grad_norm=max_grad_norm,
             use_wandb=use_wandb,

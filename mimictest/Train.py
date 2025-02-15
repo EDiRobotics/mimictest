@@ -23,6 +23,7 @@ def train(
     load_batch_id,
     save_interval,
     print_interval,
+    eval_interval,
     bs_per_gpu,
     max_grad_norm,
     use_wandb,
@@ -80,22 +81,21 @@ def train(
                 for key in batch_metric:
                     avg_metric[key] += batch_metric[key] / print_interval
 
-            if batch_idx_cross_epoch % save_interval == 0 and batch_idx_cross_epoch != 0:
-                # in the 1st epoch, policy.ema has not been initialized. You may also load the wrong ckpt and modify the right one
-                policy.save_pretrained(acc, save_path, batch_idx_cross_epoch + load_batch_id)
-            
-            if batch_idx_cross_epoch % print_interval == 0 and batch_idx_cross_epoch != 0:
-                if eva is not None:
-                    avg_reward = torch.tensor(eva.evaluate_on_env(
-                        acc,
-                        policy, 
-                        batch_idx_cross_epoch,
-                        num_eval_ep, 
-                        max_test_ep_len,
-                        record_video,
-                    )).to(device)
-                    avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
+            if batch_idx_cross_epoch % eval_interval == 0 and eva is not None:
+                if policy.use_ema == True and batch_idx_cross_epoch != 0:
+                    # In the 1st batch, policy.ema has not been initialized. 
+                    policy.copy_ema_to_ema_net()
+                avg_reward = torch.tensor(eva.evaluate_on_env(
+                    acc,
+                    policy, 
+                    batch_idx_cross_epoch,
+                    num_eval_ep, 
+                    max_test_ep_len,
+                    record_video,
+                )).to(device)
+                avg_reward = acc.gather_for_metrics(avg_reward).mean(dim=0)
 
+            if batch_idx_cross_epoch % print_interval == 0:
                 avg_metric['dataload_percent_first_gpu'] = avg_metric['dataload_time'] * print_interval / (time()-clock)
                 avg_metric['lr'] = scheduler.get_last_lr()[0]
                 avg_metric['reward'] = avg_reward
@@ -120,6 +120,13 @@ def train(
                     avg_metric[key] = 0 
 
                 scheduler.step()
+
+            if batch_idx_cross_epoch % save_interval == 0 and batch_idx_cross_epoch != 0:
+                # In the 1st batch, policy.ema has not been initialized. 
+                # In the first epoch, you may load the wrong ckpt and modify the right one
+                if policy.use_ema == True:
+                    policy.copy_ema_to_ema_net()
+                policy.save_pretrained(acc, save_path, batch_idx_cross_epoch + load_batch_id)
             
             batch_idx_cross_epoch += 1
             batch_idx_in_epoch += 1

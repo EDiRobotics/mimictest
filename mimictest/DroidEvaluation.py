@@ -14,7 +14,6 @@ class Evaluation():
 
     def evaluate_on_env(self, acc, policy, batch_idx, num_eval_ep, max_test_ep_len, record_video=False):
         if policy.use_ema:
-            policy.copy_ema_to_ema_net()
             policy.ema_net.eval()
         else:
             policy.net.eval()

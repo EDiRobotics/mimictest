@@ -79,6 +79,7 @@ if __name__ == '__main__':
     weight_decay = 1e-4
     max_grad_norm = 10
     print_interval = 100
+    eval_interval = 100
     use_wandb = False
     do_watch_parameters = False
     record_video = True
@@ -199,6 +200,7 @@ if __name__ == '__main__':
             load_batch_id=load_batch_id,
             save_interval=save_interval,
             print_interval=print_interval,
+            eval_interval=eval_interval,
             bs_per_gpu=bs_per_gpu,
             max_grad_norm=max_grad_norm,
             use_wandb=use_wandb,
