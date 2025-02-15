@@ -337,7 +337,7 @@ You can try `conda install -c conda-forge mesa-libgl-devel-cos7-x86_64` or check
 
 6. `SystemError: initialization of _internal failed without raising an exception`.
 
-You can simply `pip -U numba` or this [link](https://stackoverflow.com/questions/74947992/how-to-remove-the-error-systemerror-initialization-of-internal-failed-without).
+You can simply `pip install -U numba` or this [link](https://stackoverflow.com/questions/74947992/how-to-remove-the-error-systemerror-initialization-of-internal-failed-without).
 
 7. `ImportError: libGL.so.1: cannot open shared object file`
 ```
