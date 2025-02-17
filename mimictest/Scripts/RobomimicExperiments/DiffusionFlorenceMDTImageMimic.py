@@ -95,6 +95,7 @@ if __name__ == '__main__':
     print_interval = 456
     eval_interval = print_interval * 20
     use_wandb = False
+    wandb_name = "robomimic"
     do_watch_parameters = False
     record_video = False
     loss_configs = {

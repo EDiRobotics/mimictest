@@ -50,18 +50,18 @@ class BasePolicy():
         else: 
             acc.print(path / f'policy_{load_epoch_id}.pth', 'does not exist. Initialize new checkpoint')
 
-    def load_wandb(self, acc, path, do_watch_parameters, save_interval):
+    def load_wandb(self, acc, name, path, do_watch_parameters, save_interval):
         if os.path.isfile(path / "wandb_id.json"):
             run_id = json.load(open(path / "wandb_id.json", "r"))
             acc.init_trackers(
-                project_name="droidflow", 
+                project_name=name, 
                 init_kwargs={"wandb": {"id": run_id, "resume": "allow"}}
             )
             if acc.is_main_process:
                 if do_watch_parameters:
                     wandb.watch(self.net, log="all", log_freq=save_interval)
         else: 
-            acc.init_trackers(project_name="droidflow")
+            acc.init_trackers(project_name=name)
             if acc.is_main_process:
                 tracker = acc.get_tracker("wandb")
                 json.dump(tracker.run.id, open(path / "wandb_id.json", "w"))

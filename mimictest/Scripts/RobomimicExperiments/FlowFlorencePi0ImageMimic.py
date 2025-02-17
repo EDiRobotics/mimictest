@@ -29,7 +29,7 @@ if __name__ == '__main__':
         file_name = 'image_abs.hdf5'
     else:
         file_name = 'image.hdf5'
-    dataset_path = Path('mimictest_data/robomimic_image/square/ph/') / file_name
+    dataset_path = Path('/home/lizhuoheng/mimictest_data/robomimic_image/square/ph/') / file_name
     bs_per_gpu = 192
     workers_per_gpu = 12
     cache_ratio = 2
@@ -60,7 +60,7 @@ if __name__ == '__main__':
     }
 
     # Network
-    model_path = Path("pretrain_models/microsoft/Florence-2-base")
+    model_path = Path("microsoft/Florence-2-base")
     freeze_vision_tower = True
     do_compile = False
     do_profile = False
@@ -85,7 +85,8 @@ if __name__ == '__main__':
     max_grad_norm = 10
     print_interval = 152
     eval_interval = print_interval * 20
-    use_wandb = False
+    use_wandb = True
+    wandb_name = "robomimic"
     do_watch_parameters = False
     record_video = False
     loss_configs = {
@@ -154,7 +155,7 @@ if __name__ == '__main__':
     )
     policy.load_pretrained(acc, save_path, load_batch_id)
     if use_wandb:
-        policy.load_wandb(acc, save_path, do_watch_parameters, save_interval)
+        policy.load_wandb(acc, wandb_name, save_path, do_watch_parameters, save_interval)
     optimizer = torch.optim.AdamW(policy.parameters(), lr=lr_max, weight_decay=weight_decay, fused=True)
     scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
     policy.net, policy.ema_net, optimizer, loader = acc.prepare(
