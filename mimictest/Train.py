@@ -81,9 +81,8 @@ def train(
                 for key in batch_metric:
                     avg_metric[key] += batch_metric[key] / print_interval
 
-            if batch_idx_cross_epoch % eval_interval == 0 and eva is not None:
-                if policy.use_ema == True and batch_idx_cross_epoch != 0:
-                    # In the 1st batch, policy.ema has not been initialized. 
+            if batch_idx_cross_epoch % eval_interval == 0 and eva is not None  and batch_idx_cross_epoch != 0:
+                if policy.use_ema == True:
                     policy.copy_ema_to_ema_net()
                 avg_reward = torch.tensor(eva.evaluate_on_env(
                     acc,
