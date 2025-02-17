@@ -311,6 +311,12 @@ wget https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash
 pip install flash_attn-2.6.3+cu118torch2.4cxx11abiTRUE-cp39-cp39-linux_x86_64.whl
 ```
 
+You can also compule flash-attn with multiple processes:
+```
+pip install ninja   
+MAX_JOBS=64 pip install -v flash-attn --no-build-isolation
+```
+
 When installing pytorch, make sure the torch cuda version and your cuda driver version are the same (e.g., 11.8).
 
 3. Cannot initialize a EGL device display
