@@ -370,3 +370,7 @@ pip install -U numba
 11. `AttributeError: module 'OpenGL.EGL' has no attribute 'EGLDeviceEXT'`
 
 Ensure PyOpenGL version is v3.1.4 and not v3.1.0
+
+12. `version `GLIBC_2.32' not found`
+
+Check this [link](https://blog.csdn.net/huazhang_001/article/details/128828999)
