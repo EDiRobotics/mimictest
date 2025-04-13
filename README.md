@@ -374,3 +374,11 @@ Ensure PyOpenGL version is v3.1.4 and not v3.1.0
 12. `version `GLIBC_2.32' not found`
 
 Check this [link](https://blog.csdn.net/huazhang_001/article/details/128828999)
+
+13. For sapien: `RuntimeError: Cannot find a suitable rendering device`:
+
+```
+apt install libglvnd-dev libegl1 libxext6 -y
+```
+
+[Link](https://github.com/haosulab/SAPIEN/issues/115)
